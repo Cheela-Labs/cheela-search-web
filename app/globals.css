@@ -1,0 +1,329 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Cheela Labs design system, expressed as Tailwind v4 theme tokens.
+   ---------------------------------------------------------------------------
+   Mirrors the `_ds/.../tokens/*.css` bundle the Claude Design project ships,
+   and is byte-for-byte the same scale the marketing site, docs, blog and demo
+   catalogue already use. Kept as a copy rather than a shared package because
+   every app here builds standalone from its own subtree mirror, where a
+   `workspace:` dependency cannot resolve.
+   ------------------------------------------------------------------------- */
+
+@theme {
+	/* Accent scale */
+	--color-orange-50: oklch(97% 0.03 60);
+	--color-orange-100: oklch(93% 0.07 60);
+	--color-orange-200: oklch(87% 0.12 60);
+	--color-orange-300: oklch(80% 0.15 55);
+	--color-orange-400: oklch(75% 0.17 50);
+	--color-orange-500: oklch(76% 0.19 55);
+	--color-orange-600: #ffa600;
+	--color-orange-700: oklch(62% 0.16 45);
+	--color-orange-800: oklch(50% 0.13 40);
+	--color-orange-900: oklch(38% 0.1 38);
+
+	/* Ink neutrals */
+	--color-ink-0: #050505;
+	--color-ink-1: #0e0e10;
+	--color-ink-2: #18181b;
+	--color-ink-3: #2a2a2e;
+	--color-ink-4: #48484f;
+	--color-ink-5: #6b6b72;
+	--color-ink-6: #95959c;
+
+	/* Paper neutrals */
+	--color-paper-0: #ffffff;
+	--color-paper-1: #fafaf8;
+	--color-paper-2: #f2f1ed;
+	--color-paper-3: #e8e6e0;
+
+	--color-line-1: #e3e1da;
+	--color-line-2: #d3d0c7;
+	--color-line-dark-1: #2a2a2e;
+	--color-line-dark-2: #3a3a40;
+
+	--color-success: #1f8b4c;
+	--color-danger: #d3402b;
+	--color-warning: #ffa600;
+	--color-info: #2b6cd3;
+
+	/* Semantic aliases */
+	--color-bg-page: var(--color-paper-1);
+	--color-bg-surface: var(--color-paper-0);
+	--color-bg-sunken: var(--color-paper-2);
+	--color-bg-inverse: var(--color-ink-1);
+	--color-fg-primary: var(--color-ink-0);
+	--color-fg-secondary: var(--color-ink-5);
+	--color-fg-tertiary: var(--color-ink-6);
+	--color-fg-on-inverse: var(--color-paper-0);
+	--color-fg-on-accent: var(--color-ink-0);
+	--color-accent: var(--color-orange-600);
+	--color-accent-strong: var(--color-orange-700);
+	--color-accent-soft: var(--color-orange-100);
+	--color-border-default: var(--color-line-1);
+	--color-border-strong: var(--color-line-2);
+
+	/* Console sub-palette */
+	--color-console-bg: var(--color-ink-1);
+	--color-console-surface: var(--color-ink-2);
+	--color-console-border: var(--color-line-dark-1);
+	--color-console-fg: #f5f4f0;
+	--color-console-fg-muted: var(--color-ink-6);
+
+	/* Fonts */
+	--font-display: var(--font-ranade), ui-sans-serif, system-ui, sans-serif;
+	--font-body: var(--font-ranade), ui-sans-serif, system-ui, sans-serif;
+	--font-mono:
+		var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+	/* Type scale */
+	--text-2xs: 11px;
+	--text-xs: 12px;
+	--text-sm: 14px;
+	--text-base: 16px;
+	--text-md: 18px;
+	--text-lg: 22px;
+	--text-xl: 28px;
+	--text-2xl: 36px;
+	--text-3xl: 48px;
+	--text-4xl: 64px;
+	--text-5xl: 88px;
+	--text-6xl: 120px;
+
+	/* Line-height */
+	--leading-tight: 1.05;
+	--leading-snug: 1.2;
+	--leading-normal: 1.45;
+	--leading-relaxed: 1.65;
+
+	/* Letter-spacing */
+	--tracking-tight: -0.03em;
+	--tracking-wide: 0.04em;
+
+	/* Radius */
+	--radius-sm: 8px;
+	--radius-md: 12px;
+	--radius-lg: 16px;
+	--radius-xl: 20px;
+	--radius-pill: 999px;
+
+	/* Shadows */
+	--shadow-xs: 0 1px 2px rgba(15, 15, 15, 0.06);
+	--shadow-sm:
+		0 2px 6px rgba(15, 15, 15, 0.07), 0 1px 2px rgba(15, 15, 15, 0.06);
+	--shadow-md:
+		0 8px 24px rgba(15, 15, 15, 0.09), 0 2px 6px rgba(15, 15, 15, 0.06);
+	--shadow-lg:
+		0 24px 56px rgba(15, 15, 15, 0.14), 0 8px 16px rgba(15, 15, 15, 0.08);
+	--shadow-focus: 0 0 0 3px var(--color-orange-200);
+
+	/* Easing */
+	--ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+	--ease-out: cubic-bezier(0, 0, 0.2, 1);
+	--ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+	/* Duration */
+	--duration-fast: 120ms;
+	--duration-base: 180ms;
+	--duration-slow: 280ms;
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------------- */
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	-webkit-font-smoothing: antialiased;
+	/* The shell owns its own scrolling regions — the thread and the sources
+	   rail scroll independently, and the composer is pinned. A scrollbar on the
+	   document would move the composer off the bottom of the viewport. */
+	overflow: hidden;
+	overscroll-behavior: none;
+}
+
+a,
+button,
+input,
+textarea,
+summary {
+	-webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+	background: var(--color-accent);
+	color: var(--color-ink-0);
+}
+
+:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
+/* Firefox renders a scrollbar gutter that shifts the centred composer; these
+   regions scroll often enough that a thin overlay bar is the better default. */
+.scroll-region {
+	scrollbar-width: thin;
+	scrollbar-color: var(--color-line-2) transparent;
+}
+
+.scroll-region::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.scroll-region::-webkit-scrollbar-thumb {
+	background: var(--color-line-2);
+	border-radius: var(--radius-pill);
+}
+
+.scroll-region::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* The thread scrolls under the header, and content meeting that edge at full
+   opacity reads as a rendering fault rather than as more answer above. The
+   fade is invisible until there is something up there to cut off, because the
+   thread is bottom-anchored and its top is empty until it overflows. */
+.thread-fade {
+	mask-image: linear-gradient(to bottom, transparent 0, black 20px);
+}
+
+/* ---------------------------------------------------------------------------
+   Bottom sheet
+   ---------------------------------------------------------------------------
+   A modal `<dialog>` is centred by the UA stylesheet with `margin: auto` and
+   sized to its content. Both have to be overridden outright for a sheet, and
+   doing it here rather than in utility classes keeps the override in one place
+   next to the backdrop rule it belongs with.
+   ------------------------------------------------------------------------- */
+
+.sheet {
+	position: fixed;
+	inset: auto 0 0 0;
+	width: 100%;
+	max-width: 100%;
+	max-height: 100dvh;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	overflow: visible;
+}
+
+.sheet::backdrop {
+	background: rgb(5 5 5 / 0.4);
+}
+
+/* ---------------------------------------------------------------------------
+   Motion
+   ---------------------------------------------------------------------------
+   The answer arrives as discrete bubbles that build upward from the bar, so
+   each block enters once, from below, and never animates again. Blocks are
+   keyed by id and appended, so the browser only ever animates the new one.
+   ------------------------------------------------------------------------- */
+
+@keyframes block-in {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.block-in {
+	animation: block-in var(--duration-slow) var(--ease-out) both;
+}
+
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
+.fade-in {
+	animation: fade-in var(--duration-base) var(--ease-out) both;
+}
+
+@keyframes sheet-up {
+	from {
+		transform: translateY(100%);
+	}
+
+	to {
+		transform: translateY(0);
+	}
+}
+
+.sheet-up {
+	animation: sheet-up var(--duration-slow) var(--ease-out) both;
+}
+
+/* The active stage marker in the progress trace. Deliberately a slow pulse
+   rather than a spinner: the trace already says what is happening, and a
+   spinner next to it would be a second, less specific answer to the same
+   question. */
+@keyframes stage-pulse {
+	0%,
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+
+	50% {
+		opacity: 0.45;
+		transform: scale(0.8);
+	}
+}
+
+.stage-pulse {
+	animation: stage-pulse 1.4s var(--ease-standard) infinite;
+}
+
+/* Source cards land as the upstream index returns them; the skeletons they
+   replace breathe so an empty rail does not read as a stalled one. */
+@keyframes skeleton {
+	0%,
+	100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.45;
+	}
+}
+
+.skeleton {
+	animation: skeleton 1.6s var(--ease-standard) infinite;
+}
+
+/* Named rather than a blanket `* { animation: none !important }`: this app
+   authors every animation it has, right above, so the classes can simply be
+   redefined at equal specificity later in the cascade. The blanket form needs
+   `!important` to beat those same class rules, and buys nothing here. */
+@media (prefers-reduced-motion: reduce) {
+	.block-in,
+	.fade-in,
+	.sheet-up,
+	.stage-pulse,
+	.skeleton {
+		animation: none;
+	}
+
+	* {
+		transition-duration: 0.01ms;
+	}
+}

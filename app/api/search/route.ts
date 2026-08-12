@@ -36,6 +36,16 @@ const MAX_QUERY_LENGTH = 400;
  */
 const SEARCH_API_URL = process.env.SEARCH_API_URL;
 
+/**
+ * Shared secret for the query plane, when it wants one.
+ *
+ * Server-side only — it is read here, in a route handler, and never reaches the
+ * browser. That is the other reason this route proxies rather than letting the
+ * client call the API directly: a token the browser holds is a token anybody
+ * holds.
+ */
+const SEARCH_API_TOKEN = process.env.SEARCH_API_TOKEN;
+
 /** One SSE stream carrying a single error, for failures before the proxy opens. */
 function errorStream(message: string): Response {
 	return new Response(
@@ -55,7 +65,15 @@ async function proxy(query: string, signal: AbortSignal): Promise<Response> {
 	try {
 		upstream = await fetch(
 			`${SEARCH_API_URL}/search?q=${encodeURIComponent(query)}`,
-			{ signal, headers: { accept: "text/event-stream" } },
+			{
+				signal,
+				headers: {
+					accept: "text/event-stream",
+					...(SEARCH_API_TOKEN
+						? { authorization: `Bearer ${SEARCH_API_TOKEN}` }
+						: {}),
+				},
+			},
 		);
 	} catch (error) {
 		// The surface renders an error *frame*; a 502 from here would give it a
@@ -64,6 +82,14 @@ async function proxy(query: string, signal: AbortSignal): Promise<Response> {
 			`The search service could not be reached. ${
 				error instanceof Error ? error.message : String(error)
 			}`,
+		);
+	}
+
+	if (upstream.status === 401) {
+		// Named, because the generic message sends somebody to read pipeline code
+		// when the actual fix is one environment variable on one of two hosts.
+		return errorStream(
+			"The search service rejected this deployment's credentials — SEARCH_API_TOKEN is missing or does not match the value set on the API.",
 		);
 	}
 

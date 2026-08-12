@@ -4,10 +4,17 @@ import type { SearchEvent } from "@/lib/search/types";
 /**
  * The query endpoint, as server-sent events.
  *
- * This is the seam. Today it runs `lib/search/pipeline.ts` against a fixture
- * corpus; when `apps/search-api` exists it proxies that instead, and nothing in
- * `components/` changes, because the surface only ever knew about the event
- * stream.
+ * This is the seam, and it is now both halves of it. With `SEARCH_API_URL` set
+ * it proxies `apps/search-api`; without it, it runs `lib/search/pipeline.ts`
+ * against the fixture corpus. Nothing in `components/` knows the difference,
+ * because the surface only ever knew about the event stream — which is what
+ * that seam was for.
+ *
+ * Proxied rather than called from the browser. The API's CORS allowlist would
+ * permit a direct call, but going through here keeps the request same-origin,
+ * keeps the API's URL server-side, and leaves one place to add caching or a
+ * rate limit later. The cost is one hop, and the body is passed through
+ * unbuffered so it costs no latency to first byte.
  *
  * SSE rather than a JSON response because the ordering is the product: sources
  * and capability chips are useful the moment they exist, roughly two seconds
@@ -21,6 +28,53 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MAX_QUERY_LENGTH = 400;
+
+/**
+ * Where the real query plane lives. Unset in a checkout with no backend, which
+ * is why the fixture corpus is still here rather than deleted — a surface that
+ * cannot run without a deployed API is a surface nobody can work on offline.
+ */
+const SEARCH_API_URL = process.env.SEARCH_API_URL;
+
+/** One SSE stream carrying a single error, for failures before the proxy opens. */
+function errorStream(message: string): Response {
+	return new Response(
+		frame({ type: "error", message }) + frame({ type: "done" }),
+		{ headers: SSE_HEADERS },
+	);
+}
+
+const SSE_HEADERS = {
+	"content-type": "text/event-stream; charset=utf-8",
+	"cache-control": "no-cache, no-transform",
+	"x-accel-buffering": "no",
+} as const;
+
+async function proxy(query: string, signal: AbortSignal): Promise<Response> {
+	let upstream: Response;
+	try {
+		upstream = await fetch(
+			`${SEARCH_API_URL}/search?q=${encodeURIComponent(query)}`,
+			{ signal, headers: { accept: "text/event-stream" } },
+		);
+	} catch (error) {
+		// The surface renders an error *frame*; a 502 from here would give it a
+		// failed fetch and nothing to say about why.
+		return errorStream(
+			`The search service could not be reached. ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	}
+
+	if (!upstream.ok || !upstream.body) {
+		return errorStream(`The search service answered ${upstream.status}.`);
+	}
+
+	// Passed straight through, unbuffered. Re-parsing and re-encoding the frames
+	// here would add latency to exactly the property the stream exists for.
+	return new Response(upstream.body, { headers: SSE_HEADERS });
+}
 
 function frame(event: SearchEvent): string {
 	return `data: ${JSON.stringify(event)}\n\n`;
@@ -38,6 +92,8 @@ export async function GET(request: Request) {
 			headers: { "content-type": "application/json" },
 		});
 	}
+
+	if (SEARCH_API_URL) return proxy(query, request.signal);
 
 	const encoder = new TextEncoder();
 	const stream = new ReadableStream<Uint8Array>({
@@ -76,13 +132,5 @@ export async function GET(request: Request) {
 		},
 	});
 
-	return new Response(stream, {
-		headers: {
-			"content-type": "text/event-stream; charset=utf-8",
-			"cache-control": "no-cache, no-transform",
-			connection: "keep-alive",
-			// Proxies that buffer defeat the entire point of streaming this.
-			"x-accel-buffering": "no",
-		},
-	});
+	return new Response(stream, { headers: SSE_HEADERS });
 }

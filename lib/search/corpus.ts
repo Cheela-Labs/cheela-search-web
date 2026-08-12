@@ -3,8 +3,8 @@ import type { AnswerBlock, Intent, Source } from "./types";
 /**
  * The fixture corpus.
  *
- * `apps/search-api` and the crawler do not exist yet — Phase 0 of
- * `docs/capability-search-architecture.md` is unbuilt — so this is what the
+ * The crawler does not exist and `apps/search-api` answers nothing yet —
+ * Phase 0 of its `PLAN.md` is unbuilt — so this is what the
  * route handler answers from. It is deliberately small and deliberately
  * honest: a query with no fixture returns a block saying so rather than a
  * fabricated answer over invented sources, because a search surface that

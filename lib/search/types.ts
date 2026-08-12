@@ -3,7 +3,7 @@
  *
  * Everything here crosses a wire. `app/api/search/route.ts` currently answers
  * from a fixture corpus because the retrieval planes described in
- * `docs/capability-search-architecture.md` are not built yet — but the client
+ * `apps/search-api/PLAN.md` are not built yet — but the client
  * consumes a stream of these events and knows nothing about where they came
  * from, so replacing that handler with a proxy to the real search API is the
  * whole of the integration.

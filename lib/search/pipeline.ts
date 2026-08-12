@@ -4,9 +4,9 @@ import type { SearchEvent } from "./types";
 /**
  * The query pipeline, as a stream of events.
  *
- * Stage boundaries follow the latency budget in
- * `docs/capability-search-architecture.md`, and the ordering is the part worth
- * preserving when this is replaced by the real thing:
+ * Stage boundaries follow the latency budget in `apps/search-api/PLAN.md`, and
+ * the ordering is the part worth preserving when this is replaced by the real
+ * thing:
  *
  *   route 0→90ms · upstream search 90→520 · capability lookup 520→580
  *   fetch+extract 520→1700 · rerank 1700→2050 · compose 2050→4300

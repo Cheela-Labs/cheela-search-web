@@ -15,6 +15,7 @@ import { Block } from "./blocks";
 import { Brand } from "./brand";
 import { Composer } from "./composer";
 import { EvidencePanel } from "./evidence-panel";
+import { PlacesGrid } from "./places-grid";
 import { ProgressTrace } from "./progress-trace";
 import { SourcesList } from "./sources-rail";
 import { SourcesSheet } from "./sources-sheet";
@@ -278,6 +279,13 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 
 						{run.blocks.length === 0 ? (
 							<ProgressTrace stages={run.stages} />
+						) : null}
+
+						{/* Above the answer, because it arrives before the answer does
+						    and because a discovery query asked where to go, not for a
+						    paragraph about it. */}
+						{run.intent === "discovery" ? (
+							<PlacesGrid places={run.places} />
 						) : null}
 
 						{run.blocks.map((block) => (

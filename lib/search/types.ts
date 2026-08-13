@@ -125,12 +125,46 @@ export type Source = {
 	 * colour derived from the domain costs neither.
 	 */
 	swatch: string;
+	/**
+	 * The source page's own `og:image`, when it declared one — absent on roughly
+	 * a fifth of pages, so nothing may depend on it.
+	 *
+	 * This is the page's *self-description*, taken from the page this card links
+	 * to. It is not a product photo matched to the link from somewhere else, and
+	 * it carries no promise of being a product at all: on a storefront it is
+	 * usually the shop's own hero image or logo.
+	 */
+	image?: string;
 	capturedLabel?: string;
 	passages: Passage[];
 };
 
+/**
+ * Somewhere to go, as opposed to something we read.
+ *
+ * A `Source` is evidence — it has passages, it carries a citation number, and
+ * the answer may claim it said something. A `Place` is a destination and claims
+ * nothing. It exists because the pages a discovery query most wants to show are
+ * exactly the ones that cannot be read: storefronts render their catalogues in
+ * JavaScript, so they extract to nothing while still publishing a complete
+ * `<head>` with a title and an image.
+ *
+ * Nothing here is ever cited. That is why it is a separate type and not a flag.
+ */
+export type Place = {
+	id: string;
+	domain: string;
+	/** Where the reader is sent. After redirects, when there were any. */
+	url: string;
+	title: string;
+	swatch: string;
+	/** The page's own `og:image`, when it declared one. */
+	image?: string;
+};
+
 export type SearchEvent =
 	| { type: "intent"; intent: Intent }
+	| { type: "places"; places: Place[] }
 	| { type: "stage"; stage: Stage }
 	| { type: "crawled"; count: number }
 	| { type: "source"; source: Source }
@@ -145,6 +179,8 @@ export type SearchRun = {
 	stages: Stage[];
 	crawled: number;
 	sources: Source[];
+	/** Only ever populated for discovery queries. */
+	places: Place[];
 	blocks: AnswerBlock[];
 	status: "idle" | "running" | "done" | "error";
 	error?: string;
@@ -157,6 +193,7 @@ export function emptyRun(query: string): SearchRun {
 		stages: [],
 		crawled: 0,
 		sources: [],
+		places: [],
 		blocks: [],
 		status: "running",
 	};
@@ -167,6 +204,8 @@ export function applyEvent(run: SearchRun, event: SearchEvent): SearchRun {
 	switch (event.type) {
 		case "intent":
 			return { ...run, intent: event.intent };
+		case "places":
+			return { ...run, places: event.places };
 		case "stage": {
 			const stages = run.stages.some((s) => s.id === event.stage.id)
 				? run.stages.map((s) => (s.id === event.stage.id ? event.stage : s))

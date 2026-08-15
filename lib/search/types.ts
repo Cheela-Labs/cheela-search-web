@@ -137,6 +137,18 @@ export type Source = {
 	image?: string;
 	capturedLabel?: string;
 	passages: Passage[];
+	/**
+	 * What this domain says it can do, from its ADS manifest.
+	 *
+	 * Usually absent — most of the web publishes no manifest. Read from an index
+	 * the query plane fills out of band, never fetched while a query is running,
+	 * so these arrive with the source rather than after the answer.
+	 *
+	 * **Nothing here is invocable from this surface.** `callable` says whether
+	 * the query plane *could* speak the transport, which is information about
+	 * the result, not an offer to act.
+	 */
+	capabilities?: CapabilityRef[];
 };
 
 /**

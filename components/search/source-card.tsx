@@ -1,5 +1,6 @@
 import { cn } from "@/lib/cn";
 import type { Source } from "@/lib/search/types";
+import { CapabilityChips } from "./capability-chips";
 
 export function SourceCard({
 	source,
@@ -50,6 +51,9 @@ export function SourceCard({
 					{cited} passage{cited === 1 ? "" : "s"}
 					{source.capturedLabel ? ` · ${source.capturedLabel}` : ""}
 				</span>
+				{source.capabilities ? (
+					<CapabilityChips capabilities={source.capabilities} />
+				) : null}
 			</span>
 		</button>
 	);

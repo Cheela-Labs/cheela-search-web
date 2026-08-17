@@ -1,142 +1,127 @@
 import { fallbackBlocks, matchFixture } from "./corpus";
-import type { SearchEvent } from "./types";
+import type {
+	AnswerBlock,
+	Citation,
+	Result,
+	SearchResponse,
+	Source,
+} from "./types";
 
 /**
- * The query pipeline, as a stream of events.
+ * The offline query plane: one `SearchResponse`, answered from the fixture
+ * corpus.
  *
- * Stage boundaries follow the latency budget in `apps/search-api/PLAN.md`, and
- * the ordering is the part worth preserving when this is replaced by the real
- * thing:
+ * This exists so the surface runs in a checkout with no backend. `SEARCH_API_URL`
+ * unset means `app/api/search/route.ts` calls this instead of proxying, and
+ * nothing in `components/` can tell.
  *
- *   route 0→90ms · upstream search 90→520 · capability lookup 520→580
- *   fetch+extract 520→1700 · rerank 1700→2050 · compose 2050→4300
+ * It deliberately returns the **wire** shape rather than the view model, even
+ * though the fixtures are authored in the view model and converting one to the
+ * other here is backwards. The reason is that `runFromResponse` is then the only
+ * path either mode takes: the offline route exercises the same mapping the real
+ * API's response goes through, so a bug in that mapping shows up on a laptop
+ * rather than only after a deploy. A fixture path that skipped it would be
+ * testing something the product does not do.
  *
- * The capability lookup is a hash join on domains that have already arrived,
- * so it finishes an order of magnitude before composition does. That is why
- * "this site can do X" is emitted ahead of the first answer block rather than
- * alongside it — the surface renders the action before the answer because the
- * pipeline genuinely knows it first, not as a presentation trick.
- *
- * Timings are held here rather than in the client so that a real backend
- * inherits the contract by emitting the same events at its own pace, and the
- * surface needs no change to track it.
+ * The event stream this replaced also simulated stage timings — 90ms to route,
+ * 430 to search, 1.2s to fetch and extract, 2.2s to compose. Those are gone
+ * with the stream, and they are not missed here: they described a latency
+ * *shape* the surface can no longer render, and pretending otherwise with
+ * setTimeout would make the offline mode slower than the real one for no gain.
  */
 
-const sleep = (ms: number) =>
-	new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-export async function* runPipeline(
-	query: string,
-	signal?: AbortSignal,
-): AsyncGenerator<SearchEvent> {
-	const fixture = matchFixture(query);
-	const aborted = () => signal?.aborted === true;
-
-	yield {
-		type: "stage",
-		stage: { id: "search", state: "active", label: "Searching the web" },
-	};
-
-	await sleep(90);
-	if (aborted()) return;
-
-	yield { type: "intent", intent: fixture?.intent ?? "informational" };
-
-	await sleep(430);
-	if (aborted()) return;
-
-	const crawled = fixture?.crawled ?? 0;
-	yield { type: "crawled", count: crawled };
-	yield {
-		type: "stage",
-		stage: {
-			id: "search",
-			state: "done",
-			label: crawled
-				? `Searched ${crawled} sources`
-				: "Searched the index — no candidates",
-		},
-	};
-
-	// Capability lookup. Only surfaced when it found something: a line saying
-	// "0 capabilities" on every informational query is noise on the overwhelming
-	// majority of traffic, and the absence of a manifest is the normal case for
-	// almost every domain on the web.
-	const capability = fixture?.blocks.find(
-		(block) => block.kind === "action" && block.capability,
+/** Renders an answer block's spans back to text with `[n]` citation markers. */
+function toText(blocks: AnswerBlock[]): string {
+	const answer = blocks.find(
+		(block): block is Extract<AnswerBlock, { kind: "answer" }> =>
+			block.kind === "answer",
 	);
-	if (capability?.kind === "action" && capability.capability) {
-		yield {
-			type: "stage",
-			stage: {
-				id: "capability",
-				state: "active",
-				label: "Checking what these sites can do",
-			},
-		};
-		await sleep(60);
-		if (aborted()) return;
-		yield {
-			type: "stage",
-			stage: {
-				id: "capability",
-				state: "done",
-				label: `1 capability on ${capability.capability.domain}`,
-			},
-		};
-	}
+	if (!answer) return "";
+	return answer.spans
+		.map((span) => (span.kind === "text" ? span.text : `[${span.n}]`))
+		.join("")
+		.trim();
+}
 
-	const sources = fixture?.sources ?? [];
-
-	yield {
-		type: "stage",
-		stage: { id: "read", state: "active", label: "Reading pages" },
+function toResult(source: Source): Result {
+	return {
+		id: source.id,
+		url: source.url,
+		domain: source.domain,
+		path: source.path,
+		title: source.title,
+		snippet: source.passages[0]?.text.slice(0, 240) ?? "",
+		image: source.image,
+		// Plausible constants. Nothing offline ranks, so these exist to satisfy
+		// the shape rather than to mean anything — and a fixture that carried
+		// hand-tuned authority scores would invite somebody to read them as data.
+		authority: 0.7,
+		freshness: 0.5,
+		swatch: source.swatch,
+		passages: source.passages,
+		capabilities: source.capabilities,
+		source: "index",
 	};
+}
 
-	// Sources land as each fetch and extraction completes, not in one batch —
-	// the rail fills progressively, which is what the skeletons in the design
-	// are placeholders for.
-	const perSource = sources.length ? 1120 / sources.length : 0;
-	for (const source of sources) {
-		await sleep(perSource);
-		if (aborted()) return;
-		yield { type: "source", source };
-	}
-	if (!sources.length) await sleep(400);
-	if (aborted()) return;
+/** The citations implied by the `[n]` markers the fixture's answer contains. */
+function toCitations(blocks: AnswerBlock[], sources: Source[]): Citation[] {
+	const answer = blocks.find(
+		(block): block is Extract<AnswerBlock, { kind: "answer" }> =>
+			block.kind === "answer",
+	);
+	if (!answer) return [];
 
-	yield {
-		type: "stage",
-		stage: {
-			id: "read",
-			state: "done",
-			label: sources.length
-				? `Read ${sources.length} relevant page${sources.length === 1 ? "" : "s"}`
-				: "Read 0 pages",
+	const cited = new Set(
+		answer.spans
+			.filter(
+				(span): span is { kind: "cite"; n: number } => span.kind === "cite",
+			)
+			.map((span) => span.n),
+	);
+
+	return [...cited]
+		.sort((a, b) => a - b)
+		.flatMap((n) => {
+			const source = sources.find((entry) => entry.n === n);
+			return source
+				? [{ n, resultId: source.id, url: source.url, title: source.title }]
+				: [];
+		});
+}
+
+export function runFixturePipeline(
+	query: string,
+	sessionId?: string,
+): SearchResponse {
+	const fixture = matchFixture(query);
+	const sources = fixture?.sources ?? [];
+	const blocks = fixture?.blocks ?? fallbackBlocks(query);
+
+	return {
+		answer: toText(blocks),
+		results: sources.map(toResult),
+		// Capability chips in the corpus are attached to their source, which is
+		// where the real API puts them too. Nothing here registers a capability
+		// of its own, so the top-level list is empty.
+		capabilities: [],
+		citations: toCitations(blocks, sources),
+		// The offline corpus has no sessions, so nothing is ever a follow-up.
+		followUp: false,
+		intent: {
+			intent: fixture?.intent ?? "information",
+			confidence: fixture ? 0.9 : 0,
+			entities: [],
+		},
+		entities: [],
+		sessionId: sessionId ?? "offline",
+		meta: {
+			latencyMs: 0,
+			servedFrom: "index",
+			hypotheses: [query],
+			// Named so the surface can say, and anyone reading a response can see,
+			// that this did not come from a search engine.
+			degraded: ["fixture-corpus"],
 		},
 	};
-
-	await sleep(350);
-	if (aborted()) return;
-
-	yield {
-		type: "stage",
-		stage: { id: "compose", state: "active", label: "Synthesizing answer" },
-	};
-
-	await sleep(320);
-	if (aborted()) return;
-
-	const blocks = fixture?.blocks ?? fallbackBlocks(query);
-	for (const block of blocks) {
-		yield { type: "block", block };
-		await sleep(380);
-		if (aborted()) return;
-	}
-
-	yield {
-		type: "stage",
-		stage: { id: "compose", state: "done", label: "Answer composed" },
-	};
-	yield { type: "done" };
 }

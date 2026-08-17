@@ -1,25 +1,23 @@
-import { runPipeline } from "@/lib/search/pipeline";
-import type { SearchEvent } from "@/lib/search/types";
+import { runFixturePipeline } from "@/lib/search/pipeline";
+import type { SearchResponse } from "@/lib/search/types";
 
 /**
- * The query endpoint, as server-sent events.
+ * The query endpoint, as one JSON response.
  *
- * This is the seam, and it is now both halves of it. With `SEARCH_API_URL` set
- * it proxies `apps/search-api`; without it, it runs `lib/search/pipeline.ts`
- * against the fixture corpus. Nothing in `components/` knows the difference,
- * because the surface only ever knew about the event stream — which is what
- * that seam was for.
+ * This is the seam, and it is both halves of it. With `SEARCH_API_URL` set it
+ * proxies `apps/search-api`; without it, it answers from the fixture corpus in
+ * `lib/search/pipeline.ts`. Nothing in `components/` knows the difference,
+ * because the surface only ever knew about `SearchResponse`.
  *
  * Proxied rather than called from the browser. The API's CORS allowlist would
  * permit a direct call, but going through here keeps the request same-origin,
- * keeps the API's URL server-side, and leaves one place to add caching or a
- * rate limit later. The cost is one hop, and the body is passed through
- * unbuffered so it costs no latency to first byte.
+ * keeps the API's URL server-side, and — the reason that actually decides it —
+ * keeps `SEARCH_API_TOKEN` on the server. A token the browser holds is a token
+ * anybody holds.
  *
- * SSE rather than a JSON response because the ordering is the product: sources
- * and capability chips are useful the moment they exist, roughly two seconds
- * before the composed answer is. Buffering the whole run into one response
- * would throw that away and make the surface feel slower than the pipeline is.
+ * POST rather than GET, and a body rather than a query string, because the
+ * session id is what makes a follow-up resolvable and a session id in a URL is
+ * a session id in every access log on the way here.
  */
 
 export const dynamic = "force-dynamic";
@@ -37,126 +35,84 @@ const MAX_QUERY_LENGTH = 400;
 const SEARCH_API_URL = process.env.SEARCH_API_URL;
 
 /**
- * Shared secret for the query plane, when it wants one.
- *
- * Server-side only — it is read here, in a route handler, and never reaches the
- * browser. That is the other reason this route proxies rather than letting the
- * client call the API directly: a token the browser holds is a token anybody
- * holds.
+ * Shared secret for the query plane. Server-side only: it is read here, in a
+ * route handler, and never reaches the browser.
  */
 const SEARCH_API_TOKEN = process.env.SEARCH_API_TOKEN;
 
-/** One SSE stream carrying a single error, for failures before the proxy opens. */
-function errorStream(message: string): Response {
-	return new Response(
-		frame({ type: "error", message }) + frame({ type: "done" }),
-		{ headers: SSE_HEADERS },
-	);
+function fail(message: string, status: number): Response {
+	return Response.json({ error: message }, { status });
 }
 
-const SSE_HEADERS = {
-	"content-type": "text/event-stream; charset=utf-8",
-	"cache-control": "no-cache, no-transform",
-	"x-accel-buffering": "no",
-} as const;
-
-async function proxy(query: string, signal: AbortSignal): Promise<Response> {
+async function proxy(
+	body: { query: string; sessionId?: string },
+	signal: AbortSignal,
+): Promise<Response> {
 	let upstream: Response;
 	try {
-		upstream = await fetch(
-			`${SEARCH_API_URL}/search?q=${encodeURIComponent(query)}`,
-			{
-				signal,
-				headers: {
-					accept: "text/event-stream",
-					...(SEARCH_API_TOKEN
-						? { authorization: `Bearer ${SEARCH_API_TOKEN}` }
-						: {}),
-				},
+		upstream = await fetch(`${SEARCH_API_URL}/search`, {
+			method: "POST",
+			signal,
+			headers: {
+				"content-type": "application/json",
+				...(SEARCH_API_TOKEN
+					? { authorization: `Bearer ${SEARCH_API_TOKEN}` }
+					: {}),
 			},
-		);
+			body: JSON.stringify(body),
+		});
 	} catch (error) {
-		// The surface renders an error *frame*; a 502 from here would give it a
-		// failed fetch and nothing to say about why.
-		return errorStream(
+		return fail(
 			`The search service could not be reached. ${
 				error instanceof Error ? error.message : String(error)
 			}`,
+			502,
 		);
 	}
 
 	if (upstream.status === 401) {
 		// Named, because the generic message sends somebody to read pipeline code
 		// when the actual fix is one environment variable on one of two hosts.
-		return errorStream(
+		return fail(
 			"The search service rejected this deployment's credentials — SEARCH_API_TOKEN is missing or does not match the value set on the API.",
+			502,
 		);
 	}
 
-	if (!upstream.ok || !upstream.body) {
-		return errorStream(`The search service answered ${upstream.status}.`);
+	if (upstream.status === 429) {
+		return fail("Too many searches just now. Try again in a moment.", 429);
 	}
 
-	// Passed straight through, unbuffered. Re-parsing and re-encoding the frames
-	// here would add latency to exactly the property the stream exists for.
-	return new Response(upstream.body, { headers: SSE_HEADERS });
-}
-
-function frame(event: SearchEvent): string {
-	return `data: ${JSON.stringify(event)}\n\n`;
-}
-
-export async function GET(request: Request) {
-	const query = (new URL(request.url).searchParams.get("q") ?? "").slice(
-		0,
-		MAX_QUERY_LENGTH,
-	);
-
-	if (!query.trim()) {
-		return new Response(JSON.stringify({ error: "Missing query" }), {
-			status: 400,
-			headers: { "content-type": "application/json" },
-		});
+	if (!upstream.ok) {
+		return fail(`The search service answered ${upstream.status}.`, 502);
 	}
 
-	if (SEARCH_API_URL) return proxy(query, request.signal);
+	// Passed through as-is. The surface ignores fields it does not know, so the
+	// API is free to add to the envelope without a release here.
+	const envelope = (await upstream.json()) as SearchResponse;
+	return Response.json(envelope);
+}
 
-	const encoder = new TextEncoder();
-	const stream = new ReadableStream<Uint8Array>({
-		async start(controller) {
-			// A disconnected client is the normal way this endpoint ends, not an
-			// exceptional one: every follow-up query aborts the search running
-			// before it. Once the stream is cancelled, `enqueue` and `close` both
-			// throw `Invalid state`, and letting that escape turns routine user
-			// behaviour into an unhandled rejection in the server log.
-			const send = (event: SearchEvent) => {
-				if (request.signal.aborted) return false;
-				try {
-					controller.enqueue(encoder.encode(frame(event)));
-					return true;
-				} catch {
-					return false;
-				}
-			};
+export async function POST(request: Request): Promise<Response> {
+	const body = await request.json().catch(() => null);
+	const query =
+		typeof (body as { query?: unknown } | null)?.query === "string"
+			? (body as { query: string }).query.slice(0, MAX_QUERY_LENGTH)
+			: "";
 
-			try {
-				for await (const event of runPipeline(query, request.signal)) {
-					if (!send(event)) break;
-				}
-			} catch (error) {
-				send({
-					type: "error",
-					message: error instanceof Error ? error.message : "Search failed",
-				});
-			} finally {
-				try {
-					controller.close();
-				} catch {
-					// Already cancelled by the disconnect.
-				}
-			}
-		},
-	});
+	if (!query.trim()) return fail("Missing query", 400);
 
-	return new Response(stream, { headers: SSE_HEADERS });
+	const sessionId =
+		typeof (body as { sessionId?: unknown } | null)?.sessionId === "string"
+			? (body as { sessionId: string }).sessionId.slice(0, 128)
+			: undefined;
+
+	if (SEARCH_API_URL) {
+		return proxy(
+			{ query, ...(sessionId ? { sessionId } : {}) },
+			request.signal,
+		);
+	}
+
+	return Response.json(runFixturePipeline(query, sessionId));
 }

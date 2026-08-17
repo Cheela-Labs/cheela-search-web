@@ -34,7 +34,7 @@ const deployment: Fixture = {
 	// single AND-list matches neither reliably.
 	match: [["deploy", "node"], ["bursty"], ["cold start"]],
 	display: "Where should I deploy a Node.js API with bursty traffic?",
-	intent: "informational",
+	intent: "information",
 	crawled: 18,
 	sources: [
 		{

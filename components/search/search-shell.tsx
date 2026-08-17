@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
-import { streamSearch } from "@/lib/search/client";
+import { search as callSearch } from "@/lib/search/client";
 import {
-	applyEvent,
 	emptyRun,
+	runFromResponse,
 	type SearchRun,
 	type Source,
 } from "@/lib/search/types";
@@ -16,7 +16,6 @@ import { Brand } from "./brand";
 import { Composer } from "./composer";
 import { EvidencePanel } from "./evidence-panel";
 import { PlacesGrid } from "./places-grid";
-import { ProgressTrace } from "./progress-trace";
 import { SourcesList } from "./sources-rail";
 import { SourcesSheet } from "./sources-sheet";
 
@@ -28,9 +27,12 @@ import { SourcesSheet } from "./sources-sheet";
  * sources fill the rail beside it. Everything below is in service of that, and
  * the two rules worth not breaking are:
  *
- *   1. Sources and capabilities render as they arrive, ahead of the answer.
- *      They are ready roughly two seconds earlier and the surface should show
- *      it.
+ *   1. Sources and capabilities render above the answer. They used to *arrive*
+ *      before it — the pipeline streamed, and they were ready about two seconds
+ *      earlier — and the layout is unchanged now that one buffered response
+ *      delivers everything at once. What was a latency property is now only an
+ *      ordering one, which is worth knowing before someone reinstates a spinner
+ *      per section to imply progress that no longer exists.
  *   2. Nothing on screen is a placeholder for a thing that does not work. A
  *      dead control in a search interface is indistinguishable from a broken
  *      one.
@@ -43,6 +45,15 @@ function queryFromLocation(): string {
 
 export function SearchShell({ initialQuery }: { initialQuery: string }) {
 	const [run, setRun] = useState<SearchRun | null>(null);
+	/**
+	 * The conversation, as far as this surface is concerned.
+	 *
+	 * A ref rather than state: it is read when a search starts and written when
+	 * one finishes, and it must never itself cause a render. It deliberately
+	 * does not survive a reload — a session is a train of thought, and resuming
+	 * one from yesterday would silently rewrite an unrelated query against it.
+	 */
+	const sessionRef = useRef<string | null>(null);
 	const [draft, setDraft] = useState("");
 	const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
 	const [sheetOpen, setSheetOpen] = useState(false);
@@ -56,8 +67,9 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 		const trimmed = query.trim();
 		if (!trimmed) return;
 
-		// A follow-up typed over a running search cancels it. Without this the
-		// two streams interleave into one run and the answer is a mix of both.
+		// A follow-up typed over a running search cancels it. Without this, two
+		// responses race and the slower one wins — so the answer left on screen
+		// is the one for the query the reader already replaced.
 		abortRef.current?.abort();
 		const controller = new AbortController();
 		abortRef.current = controller;
@@ -69,16 +81,18 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 		setShared(false);
 
 		try {
-			await streamSearch(
+			const response = await callSearch(
 				trimmed,
-				(event) => {
-					setRun((current) =>
-						current && current.query === trimmed
-							? applyEvent(current, event)
-							: current,
-					);
-				},
+				// The session id the API handed back last time. It is what makes
+				// "how many died?" resolvable against the query before it.
+				sessionRef.current,
 				controller.signal,
+			);
+			sessionRef.current = response.sessionId;
+			setRun((current) =>
+				current && current.query === trimmed
+					? runFromResponse(trimmed, response)
+					: current,
 			);
 		} catch (error) {
 			if (controller.signal.aborted) return;
@@ -126,14 +140,13 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 		return () => abortRef.current?.abort();
 	}, [initialQuery, search]);
 
-	// Everything the stream has delivered so far. The thread is bottom-anchored
-	// and only scrolls once the answer is taller than the column, so pinning it
-	// on each arrival keeps the newest block in view rather than letting it land
-	// below the fold.
-	const arrivals =
-		(run?.blocks.length ?? 0) +
-		(run?.stages.length ?? 0) +
-		(run?.sources.length ?? 0);
+	// How much has arrived. The thread is bottom-anchored and only scrolls once
+	// the answer is taller than the column, so pinning it on each arrival keeps
+	// the newest block in view rather than letting it land below the fold.
+	//
+	// With one buffered response this changes once per search rather than a dozen
+	// times, so the effect below fires once — which is all it ever needed to do.
+	const arrivals = (run?.blocks.length ?? 0) + (run?.sources.length ?? 0);
 
 	useEffect(() => {
 		const node = threadRef.current;
@@ -277,16 +290,25 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 							{run.query}
 						</p>
 
-						{run.blocks.length === 0 ? (
-							<ProgressTrace stages={run.stages} />
+						{/*
+						    Where the progress trace used to be.
+
+						    It showed six named stages ticking over as their events
+						    arrived, which was honest when the pipeline streamed. One
+						    buffered response has no stages to report — it either has an
+						    answer or it does not — and a fake trace animating against
+						    nothing would be a progress bar that knows no progress.
+						*/}
+						{busy && run.blocks.length === 0 ? (
+							<div className="w-full max-w-[720px] font-mono text-2xs text-fg-secondary tracking-wide">
+								SEARCHING
+							</div>
 						) : null}
 
 						{/* Above the answer, because it arrives before the answer does
 						    and because a discovery query asked where to go, not for a
 						    paragraph about it. */}
-						{run.intent === "discovery" ? (
-							<PlacesGrid places={run.places} />
-						) : null}
+						{run.places.length > 0 ? <PlacesGrid places={run.places} /> : null}
 
 						{run.blocks.map((block) => (
 							<div className="block-in" key={block.id}>

@@ -1,49 +1,55 @@
 /**
- * The contract between the query pipeline and the surface that renders it.
+ * The contract between the query plane and the surface that renders it.
  *
- * Everything here crosses a wire. `app/api/search/route.ts` currently answers
- * from a fixture corpus because the retrieval planes described in
- * `apps/search-api/PLAN.md` are not built yet — but the client
- * consumes a stream of these events and knows nothing about where they came
- * from, so replacing that handler with a proxy to the real search API is the
- * whole of the integration.
+ * `apps/search-api` answers `POST /search` with one JSON envelope —
+ * `SearchResponse` below, mirroring that service's `src/contracts/search.ts`.
+ * The two files are deliberately duplicated rather than shared through a
+ * package: each app builds standalone from its own subtree mirror, where a
+ * `workspace:` dependency cannot resolve, and a published package would put an
+ * npm release between every contract change and the two apps that need it.
  *
- * The event ordering matters and is part of the contract: capability and
- * source events are emitted *before* the first answer block, because the
- * architecture's whole latency argument is that the capability lookup is a
- * hash join that completes long before composition does. A surface that waits
- * for the answer to draw its sources throws that away.
+ * `SearchRun` is the surface's own view model and is *not* the wire format.
+ * `runFromResponse` is the one place the two meet, which is what kept the
+ * migration off server-sent events from reaching any component: the envelope
+ * changed shape completely and every component below still reads the same
+ * fields it always did.
+ *
+ * What was lost in that migration is worth naming rather than discovering: the
+ * old stream delivered sources roughly two seconds before the answer, so the
+ * surface could draw citations while composition was still running. One
+ * buffered response cannot do that. The progress trace went with it, because a
+ * trace of a request that arrives all at once has nothing to trace.
  */
-
-/** Stages of the query pipeline, in the order they run. */
-export type StageId =
-	| "route"
-	| "search"
-	| "capability"
-	| "read"
-	| "rank"
-	| "compose";
-
-export type StageState = "pending" | "active" | "done";
 
 /**
- * One line of the progress trace.
+ * Query intents, as both specification documents enumerate them.
  *
- * The label is authored server-side rather than derived from the id, because
- * it changes tense as the stage completes — "Reading pages" becomes "Read 9
- * relevant pages" — and only the pipeline knows the counts.
+ * Twenty values where this file used to have four. The surface treats them as
+ * an open set on purpose — it renders the label and otherwise branches on
+ * observable facts rather than on the intent, because a classifier that gains a
+ * twenty-first value should not require a release here to keep rendering.
  */
-export type Stage = {
-	id: StageId;
-	state: StageState;
-	label: string;
-};
-
-/**
- * Query intents, per the router. Only `action` may reach a third party, and
- * ambiguity is meant to resolve downward toward showing rather than doing.
- */
-export type Intent = "navigational" | "informational" | "discovery" | "action";
+export type Intent =
+	| "information"
+	| "event"
+	| "shopping"
+	| "documentation"
+	| "navigation"
+	| "action"
+	| "local"
+	| "news"
+	| "comparison"
+	| "image"
+	| "video"
+	| "research"
+	| "finance"
+	| "health"
+	| "travel"
+	| "sports"
+	| "entertainment"
+	| "education"
+	| "coding"
+	| "utility";
 
 /** A run of answer text, or a citation marker pointing at a source's number. */
 export type Span = { kind: "text"; text: string } | { kind: "cite"; n: number };
@@ -174,24 +180,84 @@ export type Place = {
 	image?: string;
 };
 
-export type SearchEvent =
-	| { type: "intent"; intent: Intent }
-	| { type: "places"; places: Place[] }
-	| { type: "stage"; stage: Stage }
-	| { type: "crawled"; count: number }
-	| { type: "source"; source: Source }
-	| { type: "block"; block: AnswerBlock }
-	| { type: "done" }
-	| { type: "error"; message: string };
+/**
+ * The `POST /search` envelope, mirroring apps/search-api's
+ * `src/contracts/search.ts`.
+ *
+ * The first five keys are the specification's; the rest are a documented
+ * superset that service adds. Fields the surface does not know are ignored
+ * rather than rejected, which is the direction that survives the API shipping
+ * before this app does.
+ */
+export type SearchResponse = {
+	answer: string;
+	results: Result[];
+	capabilities: CapabilityHit[];
+	citations: Citation[];
+	followUp: boolean;
+	intent: { intent: Intent; confidence: number; entities: string[] };
+	entities: { id: string; name: string; type: string }[];
+	sessionId: string;
+	meta: {
+		latencyMs: number;
+		servedFrom: "index" | "external" | "mixed";
+		hypotheses: string[];
+		degraded: string[];
+	};
+};
+
+export type Result = {
+	id: string;
+	url: string;
+	domain: string;
+	path: string;
+	title: string;
+	snippet: string;
+	image?: string;
+	authority: number;
+	freshness: number;
+	publishedAt?: number;
+	swatch: string;
+	passages: Passage[];
+	capabilities?: CapabilityRef[];
+	source: "index" | "external";
+};
+
+export type CapabilityHit = {
+	id: string;
+	domain: string;
+	invocationName: string;
+	title: string;
+	description: string;
+	provider: string;
+	auth: string;
+	effects: CapabilityRef["effects"];
+	callable: boolean;
+	score: number;
+};
+
+export type Citation = {
+	n: number;
+	resultId: string;
+	url: string;
+	title: string;
+};
 
 /** Everything the surface accumulates for one query. */
 export type SearchRun = {
 	query: string;
 	intent: Intent | null;
-	stages: Stage[];
 	crawled: number;
 	sources: Source[];
-	/** Only ever populated for discovery queries. */
+	/**
+	 * Destinations rather than evidence: results with no readable passages.
+	 *
+	 * The pages a shopping or navigation query most wants to show are exactly
+	 * the ones that cannot be read — storefronts render their catalogue in
+	 * JavaScript, so they extract to nothing while still publishing a complete
+	 * `<head>`. Dropping them would leave the reader with an encyclopedia
+	 * article, so they are shown as places and never cited.
+	 */
 	places: Place[];
 	blocks: AnswerBlock[];
 	status: "idle" | "running" | "done" | "error";
@@ -202,7 +268,6 @@ export function emptyRun(query: string): SearchRun {
 	return {
 		query,
 		intent: null,
-		stages: [],
 		crawled: 0,
 		sources: [],
 		places: [],
@@ -211,33 +276,140 @@ export function emptyRun(query: string): SearchRun {
 	};
 }
 
-/** Reduces one event into the accumulated run. Pure, so it is trivial to test. */
-export function applyEvent(run: SearchRun, event: SearchEvent): SearchRun {
-	switch (event.type) {
-		case "intent":
-			return { ...run, intent: event.intent };
-		case "places":
-			return { ...run, places: event.places };
-		case "stage": {
-			const stages = run.stages.some((s) => s.id === event.stage.id)
-				? run.stages.map((s) => (s.id === event.stage.id ? event.stage : s))
-				: [...run.stages, event.stage];
-			return { ...run, stages };
-		}
-		case "crawled":
-			return { ...run, crawled: event.count };
-		case "source":
-			// Guarded against duplicates so a retried frame cannot double a card.
-			return run.sources.some((s) => s.id === event.source.id)
-				? run
-				: { ...run, sources: [...run.sources, event.source] };
-		case "block":
-			return run.blocks.some((b) => b.id === event.block.id)
-				? run
-				: { ...run, blocks: [...run.blocks, event.block] };
-		case "done":
-			return { ...run, status: "done" };
-		case "error":
-			return { ...run, status: "error", error: event.message };
+/**
+ * Turns one envelope into the view model the components already read.
+ *
+ * This is the whole of the server-sent-events migration. The wire format
+ * changed completely; every component below reads the same fields it did
+ * before, because this function absorbs the difference.
+ *
+ * Two mappings deserve a word:
+ *
+ * - The answer arrives as a string with `[1]` markers and a separate citation
+ *   list. It becomes an `answer` block of spans, because the surface renders
+ *   citations as interactive elements and cannot do that with a string.
+ * - A result with no passages becomes a `Place` rather than a `Source`. A
+ *   source is evidence and the answer is allowed to claim it said something; a
+ *   place is somewhere to go and makes no such claim.
+ */
+export function runFromResponse(
+	query: string,
+	response: SearchResponse,
+): SearchRun {
+	const evidence = response.results.filter(
+		(result) => result.passages.length > 0,
+	);
+	const destinations = response.results.filter(
+		(result) => result.passages.length === 0,
+	);
+
+	// Citation numbers are assigned over the *evidence* only, so `[2]` in the
+	// answer and the second card in the rail are the same source. Numbering over
+	// all results would silently skip the ones that became places.
+	const numbering = new Map(
+		evidence.map((result, index) => [result.id, index + 1]),
+	);
+
+	const sources: Source[] = evidence.map((result, index) => ({
+		id: result.id,
+		n: index + 1,
+		domain: result.domain,
+		path: result.path,
+		url: result.url,
+		title: result.title,
+		swatch: result.swatch,
+		image: result.image,
+		passages: result.passages,
+		capabilities: result.capabilities,
+	}));
+
+	const places: Place[] = destinations.map((result) => ({
+		id: result.id,
+		domain: result.domain,
+		url: result.url,
+		title: result.title,
+		swatch: result.swatch,
+		image: result.image,
+	}));
+
+	const blocks: AnswerBlock[] = [];
+	if (response.answer) {
+		blocks.push({
+			kind: "answer",
+			id: "answer",
+			spans: toSpans(response.answer, response.citations, numbering),
+		});
 	}
+
+	for (const capability of response.capabilities) {
+		blocks.push({
+			kind: "action",
+			id: `action-${capability.id}`,
+			label: capability.provider,
+			prompt: capability.description,
+			cta: capability.title,
+			capability: {
+				domain: capability.domain,
+				invocationName: capability.invocationName,
+				effects: capability.effects,
+				callable: capability.callable,
+			},
+		});
+	}
+
+	return {
+		query,
+		intent: response.intent?.intent ?? null,
+		crawled: response.results.length,
+		sources,
+		places,
+		blocks,
+		status: "done",
+	};
+}
+
+/**
+ * Splits answer text on its `[n]` markers into text and citation spans.
+ *
+ * A marker whose number the citation list does not account for is dropped from
+ * the output rather than rendered. A citation the reader cannot follow is worse
+ * than no citation, because it looks like one.
+ */
+export function toSpans(
+	answer: string,
+	citations: Citation[],
+	numbering: Map<string, number>,
+): Span[] {
+	const known = new Set<number>();
+	for (const citation of citations) {
+		const n = numbering.get(citation.resultId);
+		if (n !== undefined) known.add(n);
+		// The API numbers citations itself; when that agrees with ours, both are
+		// present in the set and the marker renders either way.
+		known.add(citation.n);
+	}
+
+	const spans: Span[] = [];
+	let cursor = 0;
+	const pattern = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
+
+	for (let match = pattern.exec(answer); match; match = pattern.exec(answer)) {
+		const numbers = match[1]
+			.split(",")
+			.map((entry) => Number(entry.trim()))
+			.filter((n) => known.has(n));
+
+		if (numbers.length === 0) continue;
+
+		if (match.index > cursor) {
+			spans.push({ kind: "text", text: answer.slice(cursor, match.index) });
+		}
+		for (const n of numbers) spans.push({ kind: "cite", n });
+		cursor = match.index + match[0].length;
+	}
+
+	if (cursor < answer.length) {
+		spans.push({ kind: "text", text: answer.slice(cursor) });
+	}
+	return spans;
 }

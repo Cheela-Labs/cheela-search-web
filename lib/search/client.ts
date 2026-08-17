@@ -1,60 +1,40 @@
-import type { SearchEvent } from "./types";
+import type { SearchResponse } from "./types";
 
 /**
- * Reads the SSE stream from `/api/search`.
+ * Calls `/api/search`.
  *
- * `fetch` and a manual frame parser rather than `EventSource`, for two
- * reasons that both bite in practice: EventSource reconnects automatically
- * when the server closes the stream, so a completed search silently restarts
- * itself forever; and it cannot be aborted mid-flight, which is exactly what a
- * follow-up query typed over a running one needs to do.
+ * A single POST returning one JSON envelope. This replaced a `fetch` plus a
+ * hand-rolled server-sent-events frame parser, and the reason for the change is
+ * the API's, not the surface's: `apps/search-api` answers `POST /search` with a
+ * body, because the specification says so and because a session id belongs in a
+ * body rather than in a URL that lands in every access log between here and the
+ * browser.
+ *
+ * `signal` still matters as much as it did with the stream. A follow-up query
+ * typed over a running one must abort the first — otherwise two responses race
+ * and the slower one wins, so the answer on screen is for the previous query.
  */
-export async function streamSearch(
+export async function search(
 	query: string,
-	onEvent: (event: SearchEvent) => void,
+	sessionId: string | null,
 	signal: AbortSignal,
-): Promise<void> {
-	const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+): Promise<SearchResponse> {
+	const response = await fetch("/api/search", {
+		method: "POST",
 		signal,
-		headers: { accept: "text/event-stream" },
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ query, ...(sessionId ? { sessionId } : {}) }),
 	});
 
-	if (!response.ok || !response.body) {
-		throw new Error(`Search failed with ${response.status}`);
+	if (!response.ok) {
+		// The route handler answers errors as JSON with a message worth showing;
+		// anything else gets the status, which is all there is to say.
+		const detail = await response
+			.json()
+			.then((body: { error?: string }) => body.error)
+			.catch(() => null);
+		throw new Error(detail ?? `Search failed with ${response.status}`);
 	}
 
-	const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-	// Frames arrive split across chunks at arbitrary boundaries, so completed
-	// frames are drained from a buffer rather than parsed per chunk.
-	let buffer = "";
-
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			buffer += value;
-
-			let boundary = buffer.indexOf("\n\n");
-			while (boundary !== -1) {
-				const raw = buffer.slice(0, boundary);
-				buffer = buffer.slice(boundary + 2);
-				boundary = buffer.indexOf("\n\n");
-
-				const payload = raw
-					.split("\n")
-					.filter((line) => line.startsWith("data:"))
-					.map((line) => line.slice(5).trim())
-					.join("\n");
-
-				if (!payload) continue;
-				try {
-					onEvent(JSON.parse(payload) as SearchEvent);
-				} catch {
-					// A malformed frame is one lost update, not a failed search.
-				}
-			}
-		}
-	} finally {
-		reader.cancel().catch(() => {});
-	}
+	return (await response.json()) as SearchResponse;
 }

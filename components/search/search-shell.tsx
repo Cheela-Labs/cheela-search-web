@@ -389,7 +389,7 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 								type="button"
 							>
 								<span className="text-fg-secondary text-sm">
-									{sources.length} source{sources.length === 1 ? "" : "s"}
+									{sources.length} result{sources.length === 1 ? "" : "s"}
 								</span>
 								<span className="font-medium text-sm">View</span>
 							</button>

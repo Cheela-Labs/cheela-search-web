@@ -26,14 +26,12 @@ export function SourcesList({
 
 	return (
 		<div className="flex flex-col gap-3.5">
-			<div>
-				<h2 className="font-semibold text-base">Sources</h2>
-				<p className="mt-1 font-mono text-2xs text-fg-tertiary">
-					{collecting
-						? `COLLECTING · ${run.crawled} CRAWLED`
-						: `${run.sources.length} SOURCE${run.sources.length === 1 ? "" : "S"} · ${run.crawled} CRAWLED`}
-				</p>
-			</div>
+			{/* No count under the heading. It reported two numbers a reader has no
+			    use for — how many results are in a list they can see, and how many
+			    pages were crawled, which is a fact about the pipeline rather than
+			    about the answer. The rail's own state says the rest: skeletons
+			    while it collects, a sentence when it found nothing. */}
+			<h2 className="font-semibold text-base">Results</h2>
 
 			<div className="flex flex-col gap-2">
 				{run.sources.map((source) => (

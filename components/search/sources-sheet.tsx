@@ -36,7 +36,7 @@ export function SourcesSheet({
 		// through onClose.
 		// biome-ignore lint/a11y/useKeyWithClickEvents: backdrop dismissal — Escape is handled natively by <dialog> and routed through onClose
 		<dialog
-			aria-label="Sources"
+			aria-label="Results"
 			className="sheet lg:hidden"
 			onClick={(event) => {
 				// The dialog element's box spans the backdrop; a click that lands on

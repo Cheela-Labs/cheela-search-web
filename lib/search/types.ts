@@ -126,6 +126,20 @@ export type Source = {
 	url: string;
 	title: string;
 	/**
+	 * One or two lines about the page, for the results rail.
+	 *
+	 * The API's own summary where it has one — a vendor's for an external
+	 * result, ours for an indexed one — and the first extracted passage where
+	 * it does not. Deliberately not the *cited* passage: this describes the
+	 * page, and the evidence panel is where what the answer used is shown.
+	 *
+	 * Optional because a result can genuinely have neither — and because the
+	 * fixture corpus authors its sources in this shape without one. Those go
+	 * out through `toResult`, which derives a snippet from the first passage,
+	 * so the offline mode still exercises this row rather than skipping it.
+	 */
+	snippet?: string;
+	/**
 	 * Stands in for a favicon. Real favicons are third-party image requests on
 	 * every result, which is a tracking surface and a layout-shift source; a
 	 * colour derived from the domain costs neither.
@@ -247,7 +261,6 @@ export type Citation = {
 export type SearchRun = {
 	query: string;
 	intent: Intent | null;
-	crawled: number;
 	sources: Source[];
 	/**
 	 * Destinations rather than evidence: results with no readable passages.
@@ -279,7 +292,6 @@ export function emptyRun(query: string): SearchRun {
 	return {
 		query,
 		intent: null,
-		crawled: 0,
 		sources: [],
 		places: [],
 		blocks: [],
@@ -329,6 +341,7 @@ export function runFromResponse(
 		path: result.path,
 		url: result.url,
 		title: result.title,
+		snippet: result.snippet || (result.passages[0]?.text ?? ""),
 		swatch: result.swatch,
 		image: result.image,
 		passages: result.passages,
@@ -340,6 +353,7 @@ export function runFromResponse(
 		domain: result.domain,
 		url: result.url,
 		title: result.title,
+		snippet: result.snippet || (result.passages[0]?.text ?? ""),
 		swatch: result.swatch,
 		image: result.image,
 	}));
@@ -372,7 +386,6 @@ export function runFromResponse(
 	return {
 		query,
 		intent: response.intent?.intent ?? null,
-		crawled: response.results.length,
 		sources,
 		places,
 		blocks,

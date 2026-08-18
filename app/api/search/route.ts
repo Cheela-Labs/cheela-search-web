@@ -79,6 +79,23 @@ async function proxy(
 		);
 	}
 
+	if (upstream.status === 404) {
+		// A 404 is not "the search service is broken". `/search` is the only
+		// route this ever calls, and search-api answers it — so a 404 means
+		// SEARCH_API_URL is addressing something that is not search-api.
+		//
+		// It is worth naming because the wrong value looks right. Pointing this
+		// at the main platform API gets a healthy `/health`, a valid TLS
+		// certificate and a 200 on the front page; only `/search` is missing.
+		// Diagnosed from the generic message, that reads as a search outage
+		// rather than as one environment variable holding a sibling service's
+		// hostname.
+		return fail(
+			`No /search route at ${SEARCH_API_URL} — SEARCH_API_URL is set to something that is not the search API. Its /health should report {"service":"search-api"}.`,
+			502,
+		);
+	}
+
 	if (upstream.status === 429) {
 		return fail("Too many searches just now. Try again in a moment.", 429);
 	}

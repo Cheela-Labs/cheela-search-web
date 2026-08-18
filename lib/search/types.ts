@@ -140,9 +140,19 @@ export type Source = {
 	 */
 	snippet?: string;
 	/**
-	 * Stands in for a favicon. Real favicons are third-party image requests on
-	 * every result, which is a tracking surface and a layout-shift source; a
-	 * colour derived from the domain costs neither.
+	 * A stable colour per domain, drawn behind the site's own favicon and left
+	 * showing when there is not one.
+	 *
+	 * It used to be the icon rather than the backdrop, on the reasoning that a
+	 * real favicon is a third-party image request on every result — a tracking
+	 * surface and a layout-shift source — and a hashed colour is neither. The
+	 * first half of that still holds, and is why `/api/favicon` proxies rather
+	 * than pointing at a favicon service; the second stopped holding the moment
+	 * a result set came back from two domains whose hues were 26° apart and
+	 * twenty results rendered as one repeated green square.
+	 *
+	 * Under the image, not beside it: whichever of the two the reader sees
+	 * occupies the same cell at the same size, so a miss reflows nothing.
 	 */
 	swatch: string;
 	/**

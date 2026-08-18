@@ -1,6 +1,59 @@
+"use client";
+
+import { useState } from "react";
 import { cn } from "@/lib/cn";
 import type { Source } from "@/lib/search/types";
 import { CapabilityChips } from "./capability-chips";
+
+/**
+ * The site's own icon, over the domain swatch.
+ *
+ * The swatch is the fallback now rather than the icon. Roughly a fifth of
+ * sites have no favicon we can get at — a single-page app answers
+ * `/favicon.ico` with its own HTML, and some sites refuse anything that is not
+ * a browser — so the coloured square has to stay for them, and it is already
+ * what the rail drew before icons existed.
+ *
+ * It sits *under* the image rather than beside it so that a failure changes
+ * nothing about the layout: same cell, same size, same position, whichever of
+ * the two the reader ends up seeing. An icon that reserves no space until it
+ * loads is a rail that reflows while it fills.
+ *
+ * `/api/favicon` is ours and same-origin. Pointing this at a third-party
+ * favicon service would hand that service every result domain for every query
+ * anybody runs here.
+ *
+ * A plain `<img>` rather than `next/image`, deliberately. The image is 16px
+ * and already cached at the edge by the route that serves it, so an
+ * optimisation pass would add a second proxy hop and a cache entry to save
+ * nothing — and `next/image` has no way to express the one behaviour this
+ * actually needs, which is falling back to the swatch when the fetch misses.
+ */
+function SiteIcon({ domain, swatch }: { domain: string; swatch: string }) {
+	const [failed, setFailed] = useState(false);
+
+	return (
+		<span
+			aria-hidden="true"
+			className="mt-[3px] block h-4 w-4 shrink-0 overflow-hidden rounded-[4px]"
+			style={{ background: swatch }}
+		>
+			{failed ? null : (
+				// biome-ignore lint/performance/noImgElement: see the note above — next/image cannot express the onError fallback, and would re-proxy a 16px icon the edge already caches.
+				<img
+					alt=""
+					className="h-full w-full object-contain"
+					decoding="async"
+					height={16}
+					loading="lazy"
+					onError={() => setFailed(true)}
+					src={`/api/favicon?domain=${encodeURIComponent(domain)}`}
+					width={16}
+				/>
+			)}
+		</span>
+	);
+}
 
 /**
  * One result in the rail: icon, link, title, description.
@@ -35,11 +88,7 @@ export function SourceCard({
 			onClick={() => onSelect(source.id)}
 			type="button"
 		>
-			<span
-				aria-hidden="true"
-				className="mt-[3px] h-4 w-4 shrink-0 rounded-[4px]"
-				style={{ background: source.swatch }}
-			/>
+			<SiteIcon domain={source.domain} swatch={source.swatch} />
 			<span className="min-w-0 flex-1">
 				{/* Domain and path together, because a bare domain is the same three
 				    words on every result from a documentation site and the path is

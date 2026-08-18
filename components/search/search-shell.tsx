@@ -214,6 +214,19 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 	}
 
 	const busy = run.status === "running";
+	/**
+	 * A finished search that produced nothing to draw.
+	 *
+	 * All three, not just `blocks`: an answer-less response that still returned
+	 * sources is a partial result worth showing, and a discovery query can
+	 * legitimately return places and no prose. Only when none of the three has
+	 * anything is there literally nothing on the page.
+	 */
+	const empty =
+		run.status === "done" &&
+		run.blocks.length === 0 &&
+		sources.length === 0 &&
+		run.places.length === 0;
 	const blockContext = {
 		sources,
 		activeSourceId,
@@ -315,6 +328,42 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 								<Block block={block} context={blockContext} />
 							</div>
 						))}
+
+						{/*
+						    A search that succeeded and found nothing.
+
+						    Distinct from the error state above, and worth its own
+						    branch rather than being folded into it: nothing failed at
+						    the HTTP layer, so there is no message to show and no retry
+						    that would obviously behave differently. Every retrieval
+						    path can time out and the envelope still arrives — 200, an
+						    empty answer, no results — and rendering that as an empty
+						    column below the query reads as a broken surface rather
+						    than as an honest "nothing came back".
+
+						    `meta.degraded` is named when it has anything to say. It is
+						    the difference between "we looked and the web is quiet on
+						    this" and "we did not manage to look", which is the first
+						    thing anybody debugging this needs and the last thing a
+						    blank page tells them.
+						*/}
+						{empty ? (
+							<div className="w-full max-w-[720px] rounded-md border border-border-default bg-bg-surface px-5 py-4">
+								<div className="font-mono text-2xs text-fg-secondary tracking-wide">
+									NO RESULTS
+								</div>
+								<p className="mt-2 text-base text-ink-2 leading-relaxed">
+									Nothing came back for this query.
+								</p>
+								{run.degraded.length > 0 ? (
+									<p className="mt-2 text-fg-secondary text-sm leading-relaxed">
+										{run.degraded.join(", ")} did not answer in time, so this
+										search ran without{" "}
+										{run.degraded.length === 1 ? "it" : "them"}.
+									</p>
+								) : null}
+							</div>
+						) : null}
 
 						{run.status === "error" ? (
 							<div className="w-full max-w-[720px] rounded-md border border-danger/40 bg-bg-surface px-5 py-4">

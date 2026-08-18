@@ -114,5 +114,28 @@ export async function POST(request: Request): Promise<Response> {
 		);
 	}
 
+	/*
+	 * The fixture corpus is a development convenience and nothing else.
+	 *
+	 * Left reachable in production it is worse than an outage: a search engine
+	 * answering confidently out of a file of invented sources, with citations
+	 * that resolve and an answer that reads exactly like a real one. The reader
+	 * has no way to tell, and neither does anyone debugging it — a missing
+	 * environment variable would present as "search works, results are odd"
+	 * rather than as a missing environment variable.
+	 *
+	 * So the one deployment where it must not run is the one that refuses.
+	 *
+	 * Read here rather than at module scope on purpose: `next build` also runs
+	 * with `NODE_ENV=production`, and a decision taken at module scope is taken
+	 * on the build machine rather than on the one serving the request.
+	 */
+	if (process.env.NODE_ENV === "production") {
+		return fail(
+			"This deployment has no query plane configured — SEARCH_API_URL is unset. Refusing to answer from the offline fixture corpus.",
+			503,
+		);
+	}
+
 	return Response.json(runFixturePipeline(query, sessionId));
 }

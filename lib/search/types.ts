@@ -260,6 +260,17 @@ export type SearchRun = {
 	 */
 	places: Place[];
 	blocks: AnswerBlock[];
+	/**
+	 * The named parts of the query plane that failed without failing the
+	 * request, from `meta.degraded`.
+	 *
+	 * Carried into the view model because a response can be a complete success
+	 * at the HTTP layer and still contain nothing — every retrieval path can
+	 * time out and the envelope still arrives, 200, with an empty answer and no
+	 * results. Without this the surface renders that as a blank page, which
+	 * reads as a bug in the surface rather than as what it is.
+	 */
+	degraded: string[];
 	status: "idle" | "running" | "done" | "error";
 	error?: string;
 };
@@ -272,6 +283,7 @@ export function emptyRun(query: string): SearchRun {
 		sources: [],
 		places: [],
 		blocks: [],
+		degraded: [],
 		status: "running",
 	};
 }
@@ -364,6 +376,9 @@ export function runFromResponse(
 		sources,
 		places,
 		blocks,
+		// Optional-chained because the surface ignores fields it does not know
+		// and must survive an envelope that predates this one.
+		degraded: response.meta?.degraded ?? [],
 		status: "done",
 	};
 }

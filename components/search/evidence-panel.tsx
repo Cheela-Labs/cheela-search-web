@@ -14,6 +14,12 @@ import { ArrowRightIcon, CloseIcon, ExternalIcon } from "./icons";
  * everything extracted from that URL, with the cited ones still marked. A
  * citation that only linked out would make the reader re-find the claim on a
  * page we already read for them.
+ *
+ * There is a third case, and it is not an error: a result a provider returned
+ * and we never fetched. It has a title, a URL and the provider's own summary,
+ * and no passages at all, because there is no extracted text to have passages
+ * of. Rendering the two toggles over an empty column would present "we did not
+ * read this page" as "this page said nothing", so it says which it is.
  */
 export function EvidencePanel({
 	source,
@@ -35,6 +41,7 @@ export function EvidencePanel({
 	const [view, setView] = useState<"cited" | "page">("cited");
 	const cited = source.passages.filter((passage) => passage.cited);
 	const shown = view === "cited" ? cited : source.passages;
+	const unread = source.passages.length === 0;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
@@ -63,8 +70,14 @@ export function EvidencePanel({
 			</div>
 
 			<div className="flex items-center gap-2 border-border-default border-b px-5 py-3 sm:px-6">
+				{unread ? (
+					<span className="font-mono text-2xs text-fg-tertiary tracking-wide">
+						NOT READ BY US
+					</span>
+				) : null}
 				<button
 					aria-pressed={view === "cited"}
+					hidden={unread}
 					className={cn(
 						"rounded-pill px-2.5 py-1 font-mono text-2xs transition-colors duration-fast ease-out",
 						view === "cited"
@@ -78,6 +91,7 @@ export function EvidencePanel({
 				</button>
 				<button
 					aria-pressed={view === "page"}
+					hidden={unread}
 					className={cn(
 						"rounded-pill px-2.5 py-1 font-mono text-2xs transition-colors duration-fast ease-out",
 						view === "page"
@@ -101,6 +115,20 @@ export function EvidencePanel({
 			</div>
 
 			<div className="scroll-region flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-5 text-base leading-relaxed sm:px-6">
+				{unread ? (
+					<>
+						{source.snippet ? (
+							<p className="text-ink-2">{source.snippet}</p>
+						) : null}
+						<p className="text-fg-tertiary text-sm leading-relaxed">
+							A search provider returned this link and we did not fetch the
+							page, so there are no passages to show and the answer above has
+							not quoted it.{" "}
+							{source.snippet ? "The line above is the" : "There is no"}{" "}
+							{source.snippet ? "provider's own summary." : "summary either."}
+						</p>
+					</>
+				) : null}
 				{shown.map((passage) =>
 					passage.cited ? (
 						<p

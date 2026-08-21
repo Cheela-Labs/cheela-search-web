@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import type { AnswerBlock, Source, Span } from "@/lib/search/types";
 import { Citation } from "./citation";
+import { ResultModuleCard } from "./modules";
 
 /**
  * The answer, one bubble at a time.
@@ -291,7 +292,7 @@ export function Block({
 }: {
 	block: AnswerBlock;
 	context: BlockContext;
-}) {
+}): React.ReactElement {
 	switch (block.kind) {
 		case "answer":
 			return <AnswerCard context={context} spans={block.spans} />;
@@ -317,6 +318,8 @@ export function Block({
 					queries={block.queries}
 				/>
 			);
+		case "module":
+			return <ResultModuleCard module={block.module} />;
 	}
 }
 

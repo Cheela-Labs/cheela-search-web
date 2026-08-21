@@ -122,6 +122,10 @@
 	--ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 	--ease-out: cubic-bezier(0, 0, 0.2, 1);
 	--ease-in: cubic-bezier(0.4, 0, 1, 1);
+	/* Overshoots past 1 and settles back. The app tray and its tiles are the
+	   only things that use it: they scale up from the launcher, and the design
+	   gives that motion a spring rather than a decelerate. */
+	--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
 	/* Duration */
 	--duration-fast: 120ms;

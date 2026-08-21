@@ -11,6 +11,7 @@ export const site = {
 	blog: "https://blogs.cheelalabs.com",
 	demos: "https://demos.cheelalabs.com",
 	dashboard: "https://dashboard.cheelalabs.com",
+	console: "https://console.cheelalabs.com",
 	github: "https://github.com/Cheela-Labs/platform",
 	x: "https://x.com/CheelaLabs",
 } as const;

@@ -165,10 +165,15 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 	   -------------------------------------------------------------------- */
 	if (!run) {
 		return (
-			<div className="flex h-dvh flex-col overflow-hidden bg-bg-page">
-				<header className="flex shrink-0 justify-end px-6 py-5 sm:px-8">
-					<AccountChip />
-				</header>
+			<div className="relative flex h-dvh flex-col overflow-hidden bg-bg-page">
+				{/*
+				  The account control is in the bottom-left corner here, not the
+				  header — `01 Start` puts it there, and on a page whose only
+				  content is a centred bar the far corner is the one place an
+				  affordance can sit without arguing with it. `relative` above is
+				  what it positions against.
+				*/}
+				<AccountChip anchor="start" />
 				<main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-5 pb-16 sm:gap-9 sm:pb-20">
 					<Brand variant="hero" />
 					<div className="w-full max-w-[680px]">

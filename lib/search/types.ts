@@ -66,8 +66,27 @@ export type Intent =
  */
 export const CONFIDENT = 0.55;
 
-/** A run of answer text, or a citation marker pointing at a source's number. */
-export type Span = { kind: "text"; text: string } | { kind: "cite"; n: number };
+/**
+ * Answer text, with the citation markers taken out.
+ *
+ * The answer used to be a list of spans so that `[1]` could render as an
+ * interactive superscript that opened the passage behind it. That is gone, and
+ * with it the evidence panel: a result is now a link that opens where it points,
+ * which is what a reader tries to do with it anyway. `citations` is still on the
+ * wire for a client that wants it.
+ */
+export function stripCitations(answer: string): string {
+	return (
+		answer
+			// The generator writes `[1]` and `[2,3]`. Both go.
+			.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, "")
+			// A marker before punctuation leaves " ." behind, and one mid-sentence
+			// leaves a double space.
+			.replace(/\s+([.,;:!?])/g, "$1")
+			.replace(/[ \t]{2,}/g, " ")
+			.trim()
+	);
+}
 
 export type ComparisonRow = {
 	label: string;
@@ -97,8 +116,8 @@ export type Comparison = {
  * unit — each one enters once, on arrival, and never re-animates.
  */
 export type AnswerBlock =
-	| { kind: "answer"; id: string; spans: Span[] }
-	| { kind: "note"; id: string; label: string; spans: Span[] }
+	| { kind: "answer"; id: string; text: string }
+	| { kind: "note"; id: string; label: string; text: string }
 	| {
 			kind: "comparison";
 			id: string;
@@ -448,6 +467,16 @@ export type SearchRun = {
 	error?: string;
 };
 
+/**
+ * Modules that need no prose above them.
+ *
+ * Narrow on purpose. A module that shows *part* of an answer — a news timeline,
+ * a knowledge card, a set of papers — still wants the sentence that says what
+ * it means. These three are complete on their own: a conversion, a destination,
+ * and a table with a verdict in it.
+ */
+const ANSWERS_ITSELF = new Set(["utility", "navigation", "comparison"]);
+
 export function emptyRun(query: string): SearchRun {
 	return {
 		query,
@@ -486,28 +515,21 @@ export function runFromResponse(
 	const results = response.results;
 
 	/*
-	  Numbered over every result, in API order, because that is the numbering
-	  the answer's own `[n]` markers already use.
+	  Numbered in API order — the order the ranker put them in, which is the
+	  only thing the number now means.
 
-	  The generator fences `input.results.slice(0, 8)` and labels each one
-	  `n="${index + 1}"`, then `extractCitations` maps a marker straight back
-	  through `results[n - 1]`. Both are indexes into `results`.
+	  It used to mean more, and getting it wrong was a real bug: the rail's
+	  number was matched against the `[n]` in the answer, this numbered over a
+	  *filtered* list, and every external result is filtered out because the
+	  retriever gives them `chunks: []` and ranking derives no passages. One
+	  provider result above a cited one shifted every number below it, and the
+	  reader opened the wrong page from a citation that looked correct.
 
-	  This used to number over a *filtered* list — the results that had
-	  passages — while `toSpans` went on emitting the marker number as written
-	  in the answer text, and `blocks.tsx` matched that against the rail's
-	  number. The two lists agree only while every result has passages, and
-	  every `source: "external"` result has none: the retriever gives them
-	  `chunks: []`, so ranking derives no passages from them. One provider
-	  result above a cited one shifted every number below it, and the reader
-	  opened the wrong page from a citation that looked entirely correct.
-
-	  A wrong citation is worse than a missing one, because it looks like one.
+	  The answer no longer carries citations, so that particular trap is gone
+	  from this surface. The API still emits `citations` over the wire, and its
+	  generator still numbers over `results` — a client that renders them will
+	  find the two agree.
 	*/
-	const numbering = new Map(
-		results.map((result, index) => [result.id, index + 1]),
-	);
-
 	const sources: Source[] = results.map((result, index) => ({
 		id: result.id,
 		n: index + 1,
@@ -552,12 +574,9 @@ export function runFromResponse(
 		}));
 
 	const blocks: AnswerBlock[] = [];
-	if (response.answer) {
-		blocks.push({
-			kind: "answer",
-			id: "answer",
-			spans: toSpans(response.answer, response.citations, numbering),
-		});
+	const answer = stripCitations(response.answer ?? "");
+	if (answer) {
+		blocks.push({ kind: "answer", id: "answer", text: answer });
 	}
 
 	for (const capability of response.capabilities) {
@@ -616,61 +635,21 @@ export function runFromResponse(
 	  does is a good one. See `lib/search/modules`.
 	*/
 	const module = selectModule(run, response);
-	if (module) run.blocks = [...run.blocks, module];
+	if (module) {
+		run.blocks = [
+			// Some modules *are* the answer, and a paragraph above them restates
+			// it worse. The design says so on its own artboards: the navigation
+			// card is captioned "ONE DESTINATION · NO ANSWER GENERATED", and
+			// neither it nor the converter nor the comparison table is drawn with
+			// a dark answer bubble above it.
+			//
+			// Only when the module actually rendered. If it abstained — which is
+			// the common case, because most pages publish no markup — the prose
+			// is all there is and dropping it would leave a blank column.
+			...(ANSWERS_ITSELF.has(module.module.kind) ? [] : run.blocks),
+			module,
+		];
+	}
 
 	return run;
-}
-
-/**
- * Splits answer text on its `[n]` markers into text and citation spans.
- *
- * A marker whose number no result accounts for is dropped from the output
- * rather than rendered. A citation the reader cannot follow is worse than no
- * citation, because it looks like one.
- */
-export type { ResultModule };
-
-export function toSpans(
-	answer: string,
-	citations: Citation[],
-	numbering: Map<string, number>,
-): Span[] {
-	/*
-	  Our numbering only.
-
-	  This used to also admit `citation.n` verbatim, so that a marker rendered
-	  "either way" when the API's numbering and ours disagreed. They cannot
-	  disagree any more — both are indexes into `results` — and while they could,
-	  admitting both is what let a marker through to be matched against the wrong
-	  rail card. A number we cannot place is a number we do not render.
-	*/
-	const known = new Set<number>();
-	for (const citation of citations) {
-		const n = numbering.get(citation.resultId);
-		if (n !== undefined) known.add(n);
-	}
-
-	const spans: Span[] = [];
-	let cursor = 0;
-	const pattern = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
-
-	for (let match = pattern.exec(answer); match; match = pattern.exec(answer)) {
-		const numbers = match[1]
-			.split(",")
-			.map((entry) => Number(entry.trim()))
-			.filter((n) => known.has(n));
-
-		if (numbers.length === 0) continue;
-
-		if (match.index > cursor) {
-			spans.push({ kind: "text", text: answer.slice(cursor, match.index) });
-		}
-		for (const n of numbers) spans.push({ kind: "cite", n });
-		cursor = match.index + match[0].length;
-	}
-
-	if (cursor < answer.length) {
-		spans.push({ kind: "text", text: answer.slice(cursor) });
-	}
-	return spans;
 }

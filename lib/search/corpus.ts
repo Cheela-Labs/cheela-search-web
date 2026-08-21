@@ -183,54 +183,23 @@ const deployment: Fixture = {
 		{
 			kind: "answer",
 			id: "answer",
-			spans: [
-				{
-					kind: "text",
-					text: "Run it on Cloudflare Workers if the bursts are short and stateless",
-				},
-				{ kind: "cite", n: 1 },
-				{
-					kind: "text",
-					text: " — otherwise Fargate on AWS with scale-to-zero",
-				},
-				{ kind: "cite", n: 4 },
-				{ kind: "text", text: "." },
-			],
+			text:
+				"Run it on Cloudflare Workers if the bursts are short and stateless — otherwise Fargate on AWS with scale-to-zero" +
+				".",
 		},
 		{
 			kind: "note",
 			id: "why",
 			label: "WHY",
-			spans: [
-				{
-					kind: "text",
-					text: "Bursty traffic punishes anything with a warm-instance floor. Workers have no cold start and bill per request",
-				},
-				{ kind: "cite", n: 1 },
-				{ kind: "cite", n: 3 },
-				{
-					kind: "text",
-					text: ", so a 20× spike costs 20× for ninety seconds instead of a month of provisioned headroom.",
-				},
-			],
+			text: "Bursty traffic punishes anything with a warm-instance floor. Workers have no cold start and bill per request, so a 20× spike costs 20× for ninety seconds instead of a month of provisioned headroom.",
 		},
 		{
 			kind: "note",
 			id: "tradeoff",
 			label: "TRADEOFF",
-			spans: [
-				{
-					kind: "text",
-					text: "Workers cap CPU per request and run a non-Node runtime — native modules, long jobs and raw TCP won't port",
-				},
-				{ kind: "cite", n: 3 },
-				{
-					kind: "text",
-					text: ". If any of those three is load-bearing, the migration is a rewrite and Fargate is the cheaper answer",
-				},
-				{ kind: "cite", n: 5 },
-				{ kind: "text", text: "." },
-			],
+			text:
+				"Workers cap CPU per request and run a non-Node runtime — native modules, long jobs and raw TCP won't port. If any of those three is load-bearing, the migration is a rewrite and Fargate is the cheaper answer" +
+				".",
 		},
 		{
 			kind: "comparison",
@@ -310,30 +279,13 @@ const orderTracking: Fixture = {
 		{
 			kind: "answer",
 			id: "answer",
-			spans: [
-				{
-					kind: "text",
-					text: "This store publishes a manifest, so the order can be looked up directly rather than searched for",
-				},
-				{ kind: "cite", n: 2 },
-				{ kind: "text", text: "." },
-			],
+			text: "This store publishes a manifest, so the order can be looked up directly rather than searched for.",
 		},
 		{
 			kind: "note",
 			id: "why",
 			label: "WHY",
-			spans: [
-				{
-					kind: "text",
-					text: "demo-shop.cheelalabs.com declares lookupOrder at /.well-known/agent-discovery.json, over a transport we speak, on a verified domain, at read effects tier",
-				},
-				{ kind: "cite", n: 2 },
-				{
-					kind: "text",
-					text: ". That is the narrow set that may be called without asking first — everything else is described and linked, not invoked.",
-				},
-			],
+			text: "demo-shop.cheelalabs.com declares lookupOrder at /.well-known/agent-discovery.json, over a transport we speak, on a verified domain, at read effects tier. That is the narrow set that may be called without asking first — everything else is described and linked, not invoked.",
 		},
 		{
 			kind: "action",
@@ -384,23 +336,13 @@ export function fallbackBlocks(query: string): AnswerBlock[] {
 		{
 			kind: "answer",
 			id: "answer",
-			spans: [
-				{
-					kind: "text",
-					text: "Nothing is indexed for this query yet — the retrieval backend is not connected to this surface.",
-				},
-			],
+			text: "Nothing is indexed for this query yet — the retrieval backend is not connected to this surface.",
 		},
 		{
 			kind: "note",
 			id: "why",
 			label: "WHY",
-			spans: [
-				{
-					kind: "text",
-					text: `This is the query surface running against a fixture corpus. "${query.trim()}" is not in it, and answering anyway would mean composing over sources that do not exist. The two questions below are, and they exercise the full path — streamed sources, citations, evidence, and the action layer.`,
-				},
-			],
+			text: `This is the query surface running against a fixture corpus. "${query.trim()}" is not in it, and answering anyway would mean composing over sources that do not exist. The two questions below are, and they exercise the full path — results, the answer, and the action layer.`,
 		},
 		{
 			kind: "suggestions",

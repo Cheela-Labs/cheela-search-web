@@ -2,22 +2,14 @@ import type { SearchRun } from "@/lib/search/types";
 import { SourceCard, SourceSkeleton } from "./source-card";
 
 /**
- * The evidence column.
+ * The results column.
  *
- * Sources appear here while the answer is still being composed, because the
- * pipeline genuinely has them first — extraction finishes roughly two seconds
- * before composition does. Holding them back until the answer arrived would
- * make the surface feel slower than the engine is.
+ * Was the *evidence* column, when a card opened the passage the answer had
+ * quoted. Every card is now a link that opens where it points, so there is no
+ * selection to track and no panel to swap in — which is why nothing here takes
+ * an active id any more.
  */
-export function SourcesList({
-	run,
-	activeSourceId,
-	onSelectSource,
-}: {
-	run: SearchRun;
-	activeSourceId: string | null;
-	onSelectSource: (sourceId: string) => void;
-}) {
+export function SourcesList({ run }: { run: SearchRun }) {
 	const collecting = run.status === "running";
 	// The skeletons the design fades out are the candidate URLs still being
 	// fetched. Three of them, because the rail is a progress signal here, not
@@ -35,12 +27,7 @@ export function SourcesList({
 
 			<div className="flex flex-col gap-2">
 				{run.sources.map((source) => (
-					<SourceCard
-						active={source.id === activeSourceId}
-						key={source.id}
-						onSelect={onSelectSource}
-						source={source}
-					/>
+					<SourceCard key={source.id} source={source} />
 				))}
 				{skeletons.map((dim) => (
 					<SourceSkeleton dim={dim} key={dim} />

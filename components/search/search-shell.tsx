@@ -3,18 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { search as callSearch } from "@/lib/search/client";
-import {
-	emptyRun,
-	runFromResponse,
-	type SearchRun,
-	type Source,
-} from "@/lib/search/types";
+import { emptyRun, runFromResponse, type SearchRun } from "@/lib/search/types";
 import { useIsCompact } from "@/lib/use-is-compact";
 import { AccountChip } from "./account-chip";
 import { Block } from "./blocks";
 import { Brand } from "./brand";
 import { Composer } from "./composer";
-import { EvidencePanel } from "./evidence-panel";
 import { PlacesGrid } from "./places-grid";
 import { SourcesList } from "./sources-rail";
 import { SourcesSheet } from "./sources-sheet";
@@ -55,7 +49,6 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 	 */
 	const sessionRef = useRef<string | null>(null);
 	const [draft, setDraft] = useState("");
-	const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
 	const [sheetOpen, setSheetOpen] = useState(false);
 	const [shared, setShared] = useState(false);
 	const compact = useIsCompact();
@@ -76,7 +69,6 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 
 		setRun(emptyRun(trimmed));
 		setDraft("");
-		setActiveSourceId(null);
 		setSheetOpen(false);
 		setShared(false);
 
@@ -125,7 +117,6 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 			if (!query) {
 				abortRef.current?.abort();
 				setRun(null);
-				setActiveSourceId(null);
 				setSheetOpen(false);
 				return;
 			}
@@ -155,26 +146,8 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 	}, [arrivals]);
 
 	const sources = run?.sources ?? [];
-	const activeSource: Source | null =
-		sources.find((source) => source.id === activeSourceId) ?? null;
 
-	const selectSource = useCallback((sourceId: string) => {
-		setActiveSourceId(sourceId);
-		setSheetOpen(true);
-	}, []);
-
-	const closeEvidence = useCallback(() => {
-		setActiveSourceId(null);
-		setSheetOpen(false);
-	}, []);
-
-	const nextSource = useCallback(() => {
-		if (!sources.length) return;
-		setActiveSourceId((current) => {
-			const index = sources.findIndex((source) => source.id === current);
-			return sources[(index + 1) % sources.length]?.id ?? current;
-		});
-	}, [sources]);
+	const closeSheet = useCallback(() => setSheetOpen(false), []);
 
 	const share = useCallback(async () => {
 		try {
@@ -241,39 +214,17 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 	 */
 	const hasRail = busy || sources.length > 0 || run.places.length > 0;
 
-	const blockContext = {
-		sources,
-		activeSourceId,
-		onSelectSource: selectSource,
-		onSubmitQuery: submit,
-	};
+	const blockContext = { sources, onSubmitQuery: submit };
 
-	// The rail and the sheet show the same two things; only their padding
-	// differs. Written once so a change to either view cannot land in one
-	// presentation and not the other.
-	const sourcesPane = (padding: string) =>
-		activeSource ? (
-			<EvidencePanel
-				key={activeSource.id}
-				onClose={closeEvidence}
-				onNext={nextSource}
-				position={
-					sources.findIndex((source) => source.id === activeSource.id) + 1
-				}
-				source={activeSource}
-				total={sources.length}
-			/>
-		) : (
-			<div
-				className={cn("scroll-region min-h-0 flex-1 overflow-y-auto", padding)}
-			>
-				<SourcesList
-					activeSourceId={activeSourceId}
-					onSelectSource={selectSource}
-					run={run}
-				/>
-			</div>
-		);
+	// The rail and the sheet show the same list; only their padding differs.
+	// Written once so a change to either cannot land in one and not the other.
+	const sourcesPane = (padding: string) => (
+		<div
+			className={cn("scroll-region min-h-0 flex-1 overflow-y-auto", padding)}
+		>
+			<SourcesList run={run} />
+		</div>
+	);
 
 	/* ----------------------------------------------------------------------
 	   02 / 03 / 04 — Working, answer, and evidence. One layout; the rail
@@ -287,11 +238,7 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 				// the same property that sizes it — no absolute positioning, and
 				// the main column reflows in step rather than after.
 				"transition-[grid-template-columns] duration-slow ease-out motion-reduce:transition-none",
-				!hasRail
-					? "lg:grid-cols-[1fr_0px]"
-					: activeSource
-						? "lg:grid-cols-[1fr_520px]"
-						: "lg:grid-cols-[1fr_360px]",
+				hasRail ? "lg:grid-cols-[1fr_360px]" : "lg:grid-cols-[1fr_0px]",
 			)}
 		>
 			{/*
@@ -404,10 +351,7 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 						{sources.length ? (
 							<button
 								className="flex w-full max-w-[720px] items-center justify-between gap-3 rounded-md border border-border-default bg-bg-surface px-4 py-3 lg:hidden"
-								onClick={() => {
-									setActiveSourceId(null);
-									setSheetOpen(true);
-								}}
+								onClick={() => setSheetOpen(true)}
 								type="button"
 							>
 								<span className="text-fg-secondary text-sm">
@@ -458,7 +402,7 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 			  made every click on the page do nothing the moment a citation opened.
 			*/}
 			{compact ? (
-				<SourcesSheet onClose={closeEvidence} open={sheetOpen}>
+				<SourcesSheet onClose={closeSheet} open={sheetOpen}>
 					{sourcesPane("px-5 pt-2 pb-6")}
 				</SourcesSheet>
 			) : null}

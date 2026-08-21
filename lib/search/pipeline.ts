@@ -1,11 +1,5 @@
 import { fallbackBlocks, matchFixture } from "./corpus";
-import type {
-	AnswerBlock,
-	Citation,
-	Result,
-	SearchResponse,
-	Source,
-} from "./types";
+import type { AnswerBlock, Result, SearchResponse, Source } from "./types";
 
 /**
  * The offline query plane: one `SearchResponse`, answered from the fixture
@@ -30,17 +24,13 @@ import type {
  * setTimeout would make the offline mode slower than the real one for no gain.
  */
 
-/** Renders an answer block's spans back to text with `[n]` citation markers. */
+/** The answer block's text, as the wire carries it. */
 function toText(blocks: AnswerBlock[]): string {
 	const answer = blocks.find(
 		(block): block is Extract<AnswerBlock, { kind: "answer" }> =>
 			block.kind === "answer",
 	);
-	if (!answer) return "";
-	return answer.spans
-		.map((span) => (span.kind === "text" ? span.text : `[${span.n}]`))
-		.join("")
-		.trim();
+	return answer?.text.trim() ?? "";
 }
 
 function toResult(source: Source): Result {
@@ -64,32 +54,6 @@ function toResult(source: Source): Result {
 	};
 }
 
-/** The citations implied by the `[n]` markers the fixture's answer contains. */
-function toCitations(blocks: AnswerBlock[], sources: Source[]): Citation[] {
-	const answer = blocks.find(
-		(block): block is Extract<AnswerBlock, { kind: "answer" }> =>
-			block.kind === "answer",
-	);
-	if (!answer) return [];
-
-	const cited = new Set(
-		answer.spans
-			.filter(
-				(span): span is { kind: "cite"; n: number } => span.kind === "cite",
-			)
-			.map((span) => span.n),
-	);
-
-	return [...cited]
-		.sort((a, b) => a - b)
-		.flatMap((n) => {
-			const source = sources.find((entry) => entry.n === n);
-			return source
-				? [{ n, resultId: source.id, url: source.url, title: source.title }]
-				: [];
-		});
-}
-
 export function runFixturePipeline(
 	query: string,
 	sessionId?: string,
@@ -105,7 +69,11 @@ export function runFixturePipeline(
 		// where the real API puts them too. Nothing here registers a capability
 		// of its own, so the top-level list is empty.
 		capabilities: [],
-		citations: toCitations(blocks, sources),
+		// Empty, and it is not an omission. The surface no longer renders
+		// citations — a result is a link now rather than a footnote — so there
+		// are no `[n]` markers in the fixtures to derive them from. The key stays
+		// on the envelope because the real API still sends it.
+		citations: [],
 		// The offline corpus has no sessions, so nothing is ever a follow-up.
 		followUp: false,
 		intent: {

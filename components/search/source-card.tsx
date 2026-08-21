@@ -68,25 +68,28 @@ function SiteIcon({ domain, swatch }: { domain: string; swatch: string }) {
  * Which card is open is carried by the border alone now. That is enough — the
  * evidence panel it opens is on screen beside it.
  */
-export function SourceCard({
-	source,
-	active,
-	onSelect,
-}: {
-	source: Source;
-	active: boolean;
-	onSelect: (sourceId: string) => void;
-}) {
+/**
+ * One result, as a link.
+ *
+ * It was a button that opened the passage the answer had quoted, in a panel
+ * that took over the rail. That is not what a reader tries to do with a search
+ * result — they try to open it — and a card that looks like a link and does
+ * something else is a card that gets clicked twice.
+ *
+ * `noopener` because the target gets a `window.opener` handle without it, and
+ * these are arbitrary pages off the open web. `nofollow` because we are not
+ * vouching for what a retrieval ranked.
+ */
+export function SourceCard({ source }: { source: Source }) {
 	return (
-		<button
+		<a
 			className={cn(
-				"fade-in flex w-full gap-[11px] rounded-md border bg-bg-page px-3.5 py-3 text-left transition-colors duration-fast ease-out",
-				active
-					? "border-accent"
-					: "border-border-default hover:border-border-strong",
+				"fade-in flex w-full gap-[11px] rounded-md border border-border-default bg-bg-page px-3.5 py-3 text-left transition-colors duration-fast ease-out",
+				"hover:border-border-strong hover:bg-bg-sunken",
 			)}
-			onClick={() => onSelect(source.id)}
-			type="button"
+			href={source.url}
+			rel="noopener noreferrer nofollow"
+			target="_blank"
 		>
 			<SiteIcon domain={source.domain} swatch={source.swatch} />
 			<span className="min-w-0 flex-1">
@@ -119,7 +122,7 @@ export function SourceCard({
 					<CapabilityChips capabilities={source.capabilities} />
 				) : null}
 			</span>
-		</button>
+		</a>
 	);
 }
 

@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import type { AnswerBlock, Source, Span } from "@/lib/search/types";
-import { Citation } from "./citation";
+import type { AnswerBlock, Source } from "@/lib/search/types";
 import { ResultModuleCard } from "./modules";
 
 /**
@@ -16,86 +15,23 @@ import { ResultModuleCard } from "./modules";
 
 type BlockContext = {
 	sources: Source[];
-	activeSourceId: string | null;
-	onSelectSource: (sourceId: string) => void;
 	onSubmitQuery: (query: string) => void;
 };
 
 const CARD = "w-full max-w-[720px] rounded-md";
 
-function Spans({
-	spans,
-	tone,
-	context,
-}: {
-	spans: Span[];
-	tone: "on-dark" | "on-light";
-	context: BlockContext;
-}) {
-	// The lowest-numbered citation in a block is its strongest evidence — the
-	// source the claim rests on rather than one that corroborates it — and is
-	// the one the design renders in accent.
-	const primary = spans.reduce<number | null>(
-		(lowest, span) =>
-			span.kind === "cite" && (lowest === null || span.n < lowest)
-				? span.n
-				: lowest,
-		null,
-	);
-
-	return (
-		<>
-			{spans.map((span, index) => {
-				if (span.kind === "text") {
-					// Spans are a fixed authored sequence, never reordered or
-					// filtered, so the index is a stable identity here.
-					// biome-ignore lint/suspicious/noArrayIndexKey: positional by construction
-					return <span key={index}>{span.text}</span>;
-				}
-				const source = context.sources.find((item) => item.n === span.n);
-				return (
-					<Citation
-						active={source ? source.id === context.activeSourceId : false}
-						// biome-ignore lint/suspicious/noArrayIndexKey: positional by construction
-						key={index}
-						n={span.n}
-						onSelect={context.onSelectSource}
-						primary={span.n === primary}
-						source={source}
-						tone={tone}
-					/>
-				);
-			})}
-		</>
-	);
-}
-
-function AnswerCard({
-	spans,
-	context,
-}: {
-	spans: Span[];
-	context: BlockContext;
-}) {
+function AnswerCard({ text }: { text: string }) {
 	return (
 		<div className={cn(CARD, "bg-ink-1 px-5 py-5 text-paper-0 sm:px-6")}>
 			<div className="font-mono text-2xs text-ink-6 tracking-wide">ANSWER</div>
 			<p className="mt-2.5 text-pretty font-semibold text-md leading-snug tracking-tight sm:text-lg">
-				<Spans context={context} spans={spans} tone="on-dark" />
+				{text}
 			</p>
 		</div>
 	);
 }
 
-function NoteCard({
-	label,
-	spans,
-	context,
-}: {
-	label: string;
-	spans: Span[];
-	context: BlockContext;
-}) {
+function NoteCard({ label, text }: { label: string; text: string }) {
 	return (
 		<div
 			className={cn(
@@ -107,7 +43,7 @@ function NoteCard({
 				{label}
 			</div>
 			<p className="mt-2 text-pretty text-base text-ink-2 leading-relaxed">
-				<Spans context={context} spans={spans} tone="on-light" />
+				{text}
 			</p>
 		</div>
 	);
@@ -295,11 +231,9 @@ export function Block({
 }): React.ReactElement {
 	switch (block.kind) {
 		case "answer":
-			return <AnswerCard context={context} spans={block.spans} />;
+			return <AnswerCard text={block.text} />;
 		case "note":
-			return (
-				<NoteCard context={context} label={block.label} spans={block.spans} />
-			);
+			return <NoteCard label={block.label} text={block.text} />;
 		case "comparison":
 			return (
 				<ComparisonCard

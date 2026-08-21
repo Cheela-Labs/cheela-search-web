@@ -202,12 +202,21 @@ export type ResultModule =
 			url: string;
 			provenance: string;
 	  }
+	/**
+	 * The one module with no provenance line.
+	 *
+	 * Every other card here ends with one because everything above it is a
+	 * publisher's claim about their own page, and saying whose claim it is is
+	 * the whole honesty mechanism. A conversion has no source to attribute — it
+	 * is arithmetic — so a footer reading "COMPUTED LOCALLY · NO SOURCES
+	 * NEEDED" was answering a question nobody asked and taking a line of the
+	 * card to do it.
+	 */
 	| {
 			kind: "utility";
 			from: { value: string; unit: string };
 			to: { value: string; unit: string };
 			alternates: Fact[];
-			provenance: string;
 	  };
 
 export type ModuleBlock = Extract<AnswerBlock, { kind: "module" }>;

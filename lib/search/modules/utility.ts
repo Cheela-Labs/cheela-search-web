@@ -9,9 +9,11 @@ import type { Fact, ResultModule } from "./index";
  * deal of machinery to answer "450 gb to tb", and every step of it is a chance
  * to be wrong about a number the reader can check in their head.
  *
- * So this reads the query and computes. Nothing is fetched, nothing is cited,
- * and the footer says so — the design's own line is `COMPUTED LOCALLY · NO
- * SOURCES NEEDED`. It is also the only module here that cannot be stale.
+ * So this reads the query and computes. Nothing is fetched and nothing is
+ * cited, which is also why it is the one module that carries no provenance
+ * line: there is no source to attribute, and a footer saying as much spends a
+ * line of the card answering a question nobody asked. It is also the only
+ * module here that cannot be stale.
  *
  * ## Bytes are two units with one name
  *
@@ -347,6 +349,5 @@ export function readUtility(run: SearchRun): ResultModule | null {
 		from: { value: present(amount), unit: from.label.toUpperCase() },
 		to: { value: present(converted), unit: to.label.toUpperCase() },
 		alternates,
-		provenance: "COMPUTED LOCALLY · NO SOURCES NEEDED",
 	};
 }

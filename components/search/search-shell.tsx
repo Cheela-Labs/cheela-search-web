@@ -227,6 +227,20 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 		run.blocks.length === 0 &&
 		sources.length === 0 &&
 		run.places.length === 0;
+	/**
+	 * Whether there is a rail to show at all.
+	 *
+	 * A conversion is answered by arithmetic and retrieves nothing, so the rail
+	 * would render "Nothing was retrieved for this query" beside a correct
+	 * answer — which reads as a failure rather than as a query that needed no
+	 * sources. It slides out instead, and the answer takes the full column.
+	 *
+	 * Kept off `status` deliberately: while a search is running the rail holds
+	 * skeletons, and collapsing it mid-flight would slide the column open and
+	 * shut on every search.
+	 */
+	const hasRail = busy || sources.length > 0 || run.places.length > 0;
+
 	const blockContext = {
 		sources,
 		activeSourceId,
@@ -269,7 +283,15 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 		<div
 			className={cn(
 				"grid h-dvh grid-cols-1 overflow-hidden bg-bg-page",
-				activeSource ? "lg:grid-cols-[1fr_520px]" : "lg:grid-cols-[1fr_360px]",
+				// grid-template-columns is animatable, so the column closing is
+				// the same property that sizes it — no absolute positioning, and
+				// the main column reflows in step rather than after.
+				"transition-[grid-template-columns] duration-slow ease-out motion-reduce:transition-none",
+				!hasRail
+					? "lg:grid-cols-[1fr_0px]"
+					: activeSource
+						? "lg:grid-cols-[1fr_520px]"
+						: "lg:grid-cols-[1fr_360px]",
 			)}
 		>
 			{/*
@@ -409,7 +431,23 @@ export function SearchShell({ initialQuery }: { initialQuery: string }) {
 				</div>
 			</div>
 
-			<aside className="hidden min-h-0 flex-col border-border-default border-l bg-bg-surface lg:flex">
+			{/*
+			  Slides out rather than unmounting. Unmounting would drop the rail
+			  the instant the answer arrived, which is a jump; this way the
+			  column and its contents leave together. `overflow-hidden` is what
+			  keeps 360px of content from spilling into the answer while the
+			  track closes.
+			*/}
+			<aside
+				aria-hidden={!hasRail}
+				className={cn(
+					"hidden min-h-0 flex-col overflow-hidden bg-bg-surface lg:flex",
+					"transition-[transform,opacity] duration-slow ease-out motion-reduce:transition-none",
+					hasRail
+						? "translate-x-0 border-border-default border-l opacity-100"
+						: "pointer-events-none translate-x-full opacity-0",
+				)}
+			>
 				{sourcesPane("px-[22px] py-6")}
 			</aside>
 

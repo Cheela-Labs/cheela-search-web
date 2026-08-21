@@ -561,7 +561,6 @@ export function UtilityCard({ module }: Card<"utility">) {
 					))}
 				</div>
 			) : null}
-			<Provenance>{module.provenance}</Provenance>
 		</ModuleCard>
 	);
 }
